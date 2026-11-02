@@ -1,28 +1,28 @@
-# Dashboard de Moqesh AI (web)
+# Moqesh AI Dashboard (web)
 
-Frontend del dashboard: React + TypeScript + Vite + Tailwind. Consume la API en
-`/api`, el tiempo real por WebSocket en `/hubs/stream` y las descargas en `/download`.
+The dashboard frontend: React + TypeScript + Vite + Tailwind. It consumes the API at
+`/api`, real-time updates over WebSocket at `/hubs/stream`, and downloads at `/download`.
 
-## Desarrollo
+## Development
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173 (proxy /api, /hubs y /download → :5000)
+npm run dev     # http://localhost:5173 (proxies /api, /hubs, and /download → :5000)
 ```
 
-Arranca también el backend (`moqesh` en el repo raíz) para tener datos reales.
+Also start the backend (`moqesh` in the repo root) to get real data.
 
 ## Build
 
 ```bash
-npm run build   # type-check (tsc) + build de producción a web/dist
+npm run build   # type-check (tsc) + production build to web/dist
 ```
 
-En producción el backend sirve `web/dist` como SPA (mismo origen que la API). En la
-imagen Docker el build se hace en una etapa de Node y se copia al servidor Python.
+In production the backend serves `web/dist` as an SPA (same origin as the API). In the
+Docker image the build runs in a Node stage and is copied into the Python server.
 
-## Estructura
+## Structure
 
-- `src/pages/` — Dashboard, Sesiones, Requests, Alertas, Reglas, Escenarios, Blocks, **Sensores**.
-- `src/services/api.ts` — cliente REST tipado. `src/services/realtime.ts` — WebSocket nativo.
-- `src/types/index.ts` — tipos del contrato (camelCase, espejo de `moqesh/schemas.py`).
+- `src/pages/` — Dashboard, Sessions, Requests, Alerts, Rules, Scenarios, Blocks, **Sensors**.
+- `src/services/api.ts` — typed REST client. `src/services/realtime.ts` — native WebSocket.
+- `src/types/index.ts` — contract types (camelCase, mirroring `moqesh/schemas.py`).
