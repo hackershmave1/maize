@@ -1,4 +1,4 @@
-"""Router de monitoreo: requests, alertas y reglas de detección."""
+"""Monitoring router: requests, alerts and detection rules."""
 
 from __future__ import annotations
 
@@ -34,11 +34,11 @@ def list_requests(
 def get_request(request_id: int, db: Session = Depends(get_session)) -> RequestLogDto:
     r = db.get(RequestLog, request_id)
     if r is None:
-        raise HTTPException(status_code=404, detail="request no encontrada")
+        raise HTTPException(status_code=404, detail="request not found")
     return RequestLogDto.model_validate(r)
 
 
-# ---- Alertas ----
+# ---- Alerts ----
 
 
 @router.get("/alerts", response_model=list[AlertSummary])
@@ -72,14 +72,14 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_session)) -> Resp
 
     a = db.get(Alert, alert_id)
     if a is None:
-        raise HTTPException(status_code=404, detail="alerta no encontrada")
+        raise HTTPException(status_code=404, detail="alert not found")
     if a.acknowledged_at is None:
         a.acknowledged_at = utcnow()
         db.commit()
     return Response(status_code=204)
 
 
-# ---- Reglas ----
+# ---- Rules ----
 
 
 @router.get("/rules", response_model=list[DetectionRuleDto])
@@ -92,7 +92,7 @@ def list_rules(db: Session = Depends(get_session)) -> list[DetectionRuleDto]:
 def update_rule(rule_id: int, patch: UpdateRuleRequest, db: Session = Depends(get_session)) -> Response:
     r = db.get(DetectionRule, rule_id)
     if r is None:
-        raise HTTPException(status_code=404, detail="regla no encontrada")
+        raise HTTPException(status_code=404, detail="rule not found")
     if patch.weight is not None:
         r.weight = patch.weight
     if patch.is_active is not None:

@@ -1,14 +1,14 @@
-"""RNG determinista por (seed, path) — primitivo anti-fingerprint.
+"""Deterministic RNG per (seed, path): the anti-fingerprint primitive.
 
-Deriva una secuencia pseudoaleatoria de `SHA-256(seed + "\\0" + path)` y la
-extiende re-hasheando el estado. Propiedad clave:
+Derives a pseudorandom sequence from `SHA-256(seed + "\\0" + path)` and
+extends it by re-hashing the state. Key property:
 
-- **Estable**: el mismo (seed, path) produce SIEMPRE la misma salida -> un nodo
-  del laberinto no delata aleatoriedad entre peticiones.
-- **Único por deployment**: otro seed cambia por completo nombres, rutas,
-  tokens y banners -> dos instalaciones no comparten firma estática.
+- **Stable**: the same (seed, path) ALWAYS produces the same output -> a labyrinth
+  node does not reveal randomness across requests.
+- **Unique per deployment**: another seed completely changes names, paths,
+  tokens and banners -> two installations share no static signature.
 
-No es un RNG de propósito criptográfico; es un generador determinista reproducible.
+This is not a cryptographic RNG; it is a reproducible deterministic generator.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ _ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 
 class SeededRandom:
-    """Flujo determinista de bytes derivado de (seed, path)."""
+    """Deterministic byte stream derived from (seed, path)."""
 
     __slots__ = ("_state", "_pos")
 
@@ -48,15 +48,15 @@ class SeededRandom:
         return v
 
     def below(self, n: int) -> int:
-        """Entero en [0, n)."""
+        """Integer in [0, n)."""
         return 0 if n <= 1 else self._u32() % n
 
     def between(self, lo: int, hi: int) -> int:
-        """Entero en [lo, hi)."""
+        """Integer in [lo, hi)."""
         return lo + self.below(hi - lo)
 
     def real(self) -> float:
-        """Flotante en [0, 1]."""
+        """Float in [0, 1]."""
         return self._u32() / _UINT_MAX
 
     def chance(self, p: float) -> bool:

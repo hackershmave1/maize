@@ -1,8 +1,8 @@
-"""Pools de vocabulario genericos por tema.
+"""Generic vocabulary pools by theme.
 
-Port fiel de `Moqesh.TokenExhaust.Vocabulary` (C#). Nada esta atado a un sitio
-concreto: el generador elige un tema segun el seed (o el indicado) y, en modo
-Mimic, mezclaria el vocabulario del perfil real.
+Faithful port of `Moqesh.TokenExhaust.Vocabulary` (C#). Nothing is tied to a specific
+site: the generator picks a theme by seed (or the given one) and, in
+Mimic mode, would blend in the real profile's vocabulary.
 """
 
 from __future__ import annotations

@@ -29,7 +29,7 @@ export function Rules() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Detection Rules</h1>
-        <p className="text-sm text-fg-muted mt-1">Reglas de detección de AI agents con scoring ponderado</p>
+        <p className="text-sm text-fg-muted mt-1">AI agent detection rules with weighted scoring</p>
       </div>
 
       <div className="space-y-3">
@@ -66,7 +66,7 @@ export function Rules() {
         ))}
         {rules.length === 0 && !loading && (
           <div className="text-center py-12 text-fg-muted">
-            <p className="text-sm">Sin reglas configuradas</p>
+            <p className="text-sm">No rules configured</p>
           </div>
         )}
       </div>

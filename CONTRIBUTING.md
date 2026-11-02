@@ -1,14 +1,14 @@
-# Contribuir a Moqesh AI
+# Contributing to Moqesh AI
 
-Gracias por tu interés. Esta guía cubre el entorno de desarrollo, las pruebas y
-las convenciones del proyecto.
+Thanks for your interest. This guide covers the development environment, testing and
+the project's conventions.
 
-## Requisitos
+## Requirements
 
-- Python 3.12+ y [uv](https://docs.astral.sh/uv/)
-- Node 20+ (para el dashboard React)
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Node 20+ (for the React dashboard)
 
-## Puesta en marcha
+## Getting started
 
 ```bash
 # Backend
@@ -16,48 +16,48 @@ uv venv .venv
 uv pip install --python .venv -e . pytest ruff
 .venv/bin/moqesh                 # honeypot :8080 + dashboard/API :5000
 
-# Frontend (hot reload, proxy a :5000)
+# Frontend (hot reload, proxies to :5000)
 cd web && npm install && npm run dev
 ```
 
-Configuración por entorno (prefijo `MOQESH_`): ver [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
-y [`.env.example`](.env.example).
+Configuration via environment (`MOQESH_` prefix): see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+and [`.env.example`](.env.example).
 
-## Pruebas y lint
+## Tests and lint
 
 ```bash
-.venv/bin/python -m pytest -q      # suite completa
+.venv/bin/python -m pytest -q      # full suite
 .venv/bin/ruff check moqesh tests  # lint
-.venv/bin/ruff format moqesh tests # formato
-cd web && npm run build            # type-check + build del SPA
+.venv/bin/ruff format moqesh tests # formatting
+cd web && npm run build            # type-check + SPA build
 ```
 
-El CI (`.github/workflows/ci.yml`) corre exactamente esto en cada push/PR.
+CI (`.github/workflows/ci.yml`) runs exactly this on every push/PR.
 
-## Binarios del agente
+## Agent binaries
 
-El agente remoto se distribuye como binario autocontenido (PyInstaller). La receta
-por plataforma está en [`moqesh/agent/BUILD.md`](moqesh/agent/BUILD.md); el workflow
-`release.yml` los compila (linux amd64/arm64 + windows) al publicar un tag `vX.Y.Z`.
+The remote agent ships as a self-contained binary (PyInstaller). The per-platform
+recipe is in [`moqesh/agent/BUILD.md`](moqesh/agent/BUILD.md); the `release.yml`
+workflow builds them (linux amd64/arm64 + windows) when a `vX.Y.Z` tag is published.
 
-## Estructura
+## Structure
 
-Ver el árbol en el [README](README.md#arquitectura). En corto: `moqesh/` es el
-backend (motor + API + ingestión de sensores), `web/` el dashboard, `docs/` las guías.
+See the tree in the [README](README.md#architecture). In short: `moqesh/` is the
+backend (engine + API + sensor ingestion), `web/` the dashboard, `docs/` the guides.
 
-- El **motor** (`labyrinth`, `scenarios`, `detection`, `rng`) es puro y determinista.
-- La **detección es central**: `pipeline.py` la comparten el honeypot local y la
-  ingestión remota — añade reglas ahí, no en dos sitios.
-- El **contrato del frontend** sale de `schemas.py` (Pydantic, camelCase); no armes
-  JSON a mano en los routers.
+- The **engine** (`labyrinth`, `scenarios`, `detection`, `rng`) is pure and deterministic.
+- **Detection is central**: `pipeline.py` is shared by the local honeypot and remote
+  ingestion. Add rules there, not in two places.
+- The **frontend contract** comes from `schemas.py` (Pydantic, camelCase); do not build
+  JSON by hand in the routers.
 
-## Convenciones
+## Conventions
 
-- Código y comentarios en español (coherente con el repo); `ruff` debe pasar limpio.
-- SQLAlchemy **síncrono** (threadpool de FastAPI); `httpx` **async** solo para HTTP saliente.
-- Añade pruebas para lógica nueva; los tests aíslan la DB vía `tests/conftest.py`.
-- Convención de commits: una línea de resumen + cuerpo explicando el porqué.
+- Code, comments and docs in English; `ruff` must pass cleanly.
+- **Synchronous** SQLAlchemy (FastAPI threadpool); **async** `httpx` only for outbound HTTP.
+- Add tests for new logic; the tests isolate the DB via `tests/conftest.py`.
+- Commit convention: a one-line summary + a body explaining the why.
 
-## Seguridad
+## Security
 
-¿Encontraste una vulnerabilidad? No abras un issue público: ver [`SECURITY.md`](SECURITY.md).
+Found a vulnerability? Do not open a public issue: see [`SECURITY.md`](SECURITY.md).

@@ -1,7 +1,7 @@
-"""Modelos SQLAlchemy 2.0 — port completo de `Moqesh.Core.Models`.
+"""SQLAlchemy 2.0 models: a full port of `Moqesh.Core.Models`.
 
-Equivale a EF Core (`MoqeshDbContext`). Atributos en snake_case; la serializacion
-camelCase para el frontend se hace en los controllers (dashboard/api).
+Equivalent to EF Core (`MoqeshDbContext`). Attributes in snake_case; the camelCase
+serialization for the frontend happens in the controllers (dashboard/api).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def utcnow() -> datetime:
-    """UTC naive (consistente con las columnas DateTime de SQLite)."""
+    """Naive UTC (consistent with SQLite's DateTime columns)."""
     return datetime.now(UTC).replace(tzinfo=None)
 
 
@@ -234,10 +234,10 @@ class BlockedIp(Base):
 
 
 class Sensor(Base):
-    """Punto de despliegue: honeypot local, agente remoto o endpoint agentless.
+    """Deployment point: local honeypot, remote agent or agentless endpoint.
 
-    `api_secret` es la clave simétrica compartida (HMAC en ambos sentidos); de
-    mínimo privilegio y revocable. Si la DB se filtra, se rota la clave.
+    `api_secret` is the shared symmetric key (HMAC in both directions); least
+    privilege and revocable. If the DB leaks, the key is rotated.
     """
 
     __tablename__ = "sensors"
@@ -250,7 +250,7 @@ class Sensor(Base):
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_ingest_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # Generación de contenido del sensor (su propio seed → anti-fingerprint).
+    # The sensor's content generation (its own seed -> anti-fingerprint).
     seed: Mapped[str] = mapped_column(String(64), default="")
     scenario_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     generation_mode: Mapped[str] = mapped_column(String(20), default="Template")
@@ -258,15 +258,15 @@ class Sensor(Base):
     vocabulary_theme: Mapped[str] = mapped_column(String(20), default="")
     brand_name: Mapped[str] = mapped_column(String(128), default="")
 
-    # Qué cubre / dónde vive el cebo (agentless: prefijo para filtrar logs).
+    # What it covers / where the lure lives (agentless: prefix for filtering logs).
     covered_url: Mapped[str] = mapped_column(String(512), default="")
     covered_app: Mapped[str] = mapped_column(String(200), default="")
     base_path: Mapped[str] = mapped_column(String(512), default="/")
 
-    # Credenciales simétricas + control de versión.
+    # Symmetric credentials + version control.
     key_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, default="")
     api_secret: Mapped[str] = mapped_column(String(128), default="")
-    install_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # un solo uso
+    install_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # single use
     agent_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     config_version: Mapped[int] = mapped_column(Integer, default=1)
 
@@ -275,8 +275,8 @@ class Sensor(Base):
 
 
 class User(Base):
-    """Usuario del dashboard. v1: un admin único (bootstrap por env). La contraseña se
-    guarda hasheada con PBKDF2-HMAC-SHA256 (stdlib); nunca en claro."""
+    """Dashboard user. v1: a single admin (bootstrapped from env). The password is
+    stored hashed with PBKDF2-HMAC-SHA256 (stdlib); never in cleartext."""
 
     __tablename__ = "users"
 
@@ -289,7 +289,7 @@ class User(Base):
 
 
 class SensorBundle(Base):
-    """Registro de auditoría de los ZIP generados para un sensor agentless."""
+    """Audit record of the ZIPs generated for an agentless sensor."""
 
     __tablename__ = "sensor_bundles"
 

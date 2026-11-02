@@ -1,4 +1,4 @@
-"""Tests del agente remoto: señales fuertes (puro) + firmado HMAC (sin red real)."""
+"""Remote agent tests: strong signals (pure) + HMAC signing (no real network)."""
 
 import json
 import time
@@ -34,7 +34,7 @@ def _bearer_for(scenario, ctx, key):
     return ctx.secret_of(scenario.cred(key))
 
 
-# ----------------------------- mapeo del pack --------------------------------
+# ----------------------------- pack mapping ----------------------------------
 
 
 def test_build_scenario_maps_camel_to_snake():
@@ -49,7 +49,7 @@ def test_build_scenario_maps_camel_to_snake():
     assert sc.cred("admin").username == "admin" and sc.cred("admin").kind == "basic"
 
 
-# ----------------------------- señales fuertes acumulativas ------------------
+# ----------------------------- cumulative strong signals ---------------------
 
 
 def test_strong_signals_follow_ctf_chain():
@@ -63,23 +63,23 @@ def test_strong_signals_follow_ctf_chain():
         assert hit is not None, path
         return update_progress(prog, sc, hit, path)
 
-    # robots.txt (linked, stage 0): nada se dispara.
+    # robots.txt (linked, stage 0): nothing fires.
     sig = visit("/robots.txt")
     assert sig == dict.fromkeys(sig, False)
 
-    # Descarga del binario (linked): otorga credenciales pero aún no hay reuso ni oculto.
+    # Binary download (linked): grants credentials but there is no reuse or hidden access yet.
     sig = visit("/backup/Portal.dll")
     assert sig["credential_reuse"] is False and sig["hidden_path_access"] is False
     assert "svc_bearer" in prog.credentials_obtained
 
-    # Acceso a ruta oculta hinteada por el binario, sin credencial -> hidden + decompile + fallo.
+    # Access to a hidden path hinted by the binary, without a credential -> hidden + decompile + failure.
     sig = visit("/api/internal/vault")
     assert sig["hidden_path_access"] is True  # visibility hidden
-    assert sig["binary_decompile_followup"] is True  # vault hinteado por Portal.dll (binario ya visitado)
+    assert sig["binary_decompile_followup"] is True  # vault hinted by Portal.dll (binary already visited)
     assert sig["credential_reuse"] is False
     assert prog.failed_auth_attempts == 1
 
-    # Presentar la credencial plantada correcta -> reuso confirmado.
+    # Presenting the correct planted credential -> confirmed reuse.
     bearer = _bearer_for(sc, ctx, "svc_bearer")
     sig = visit("/api/internal/vault", headers={"Authorization": f"Bearer {bearer}"})
     assert sig["credential_reuse"] is True
@@ -112,8 +112,8 @@ def _mock_client(secret, captured, *, forge_bad_server_sig=False):
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/healthz":
-            return httpx.Response(200, json={"status": "ok"})  # público, sin firma
-        assert _agent_signed(secret, request), "petición del agente mal firmada"
+            return httpx.Response(200, json={"status": "ok"})  # public, unsigned
+        assert _agent_signed(secret, request), "badly signed agent request"
         if path == "/control":
             payload = json.dumps(
                 {
@@ -156,7 +156,7 @@ def test_signing_and_server_signature_roundtrip():
 
     assert client.healthz() is True
 
-    ctrl = client.get_control()  # exige firma del servidor válida
+    ctrl = client.get_control()  # requires a valid server signature
     assert ctrl is not None and ctrl["enabled"] is True and ctrl["config_version"] == 1
 
     assert client.post_events([{"path": "/x", "strong": {}}]) is True
@@ -166,10 +166,10 @@ def test_signing_and_server_signature_roundtrip():
 def test_control_rejects_bad_server_signature():
     captured: list[dict] = []
     client = _mock_client("super-secret", captured, forge_bad_server_sig=True)
-    assert client.get_control() is None  # firma del servidor inválida -> se descarta
+    assert client.get_control() is None  # invalid server signature -> discarded
 
 
-# ----------------------------- buffer de reintento ---------------------------
+# ----------------------------- retry buffer ----------------------------------
 
 
 class _FlakyClient:
@@ -186,17 +186,17 @@ def test_event_buffer_retries_without_loss():
     fake = _FlakyClient()
     sender = EventSender(fake, interval=0.0, jitter=0.0)
     sender.enqueue({"path": "/1"})
-    sender._flush()  # falla la red: el evento queda en buffer
+    sender._flush()  # the network fails: the event stays in the buffer
     assert sender._pending == [{"path": "/1"}]
 
     fake.ok = True
     sender.enqueue({"path": "/2"})
-    sender._flush()  # reintenta el retenido + el nuevo, en orden
+    sender._flush()  # retries the held one + the new one, in order
     assert fake.calls[-1] == [{"path": "/1"}, {"path": "/2"}]
     assert sender._pending == []
 
 
-# ----------------------------- config desde entorno --------------------------
+# ----------------------------- config from environment -----------------------
 
 
 def test_config_from_env_and_defaults():
@@ -209,4 +209,4 @@ def test_config_from_env_and_defaults():
     except ValueError as exc:
         assert "MOQESH_KEY_ID" in str(exc) and "MOQESH_SECRET" in str(exc)
     else:
-        raise AssertionError("debió exigir key_id/secret")
+        raise AssertionError("should have required key_id/secret")

@@ -1,4 +1,4 @@
-"""Router de escenarios CTF: packs, nodos y credenciales (CRUD + import/export)."""
+"""CTF scenarios router: packs, nodes and credentials (CRUD + import/export)."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class ScenarioCredentialInput(CamelModel):
     usable_at_path: str | None = None
 
 
-# ---- listados / detalle (rutas específicas antes de /{id}) ----
+# ---- listings / detail (specific routes before /{id}) ----
 
 
 @router.get("", response_model=list[ScenarioSummary])
@@ -70,7 +70,7 @@ def builtins() -> list[str]:
 def import_builtin(name: str, activate: bool = Query(False), db: Session = Depends(get_session)) -> dict:
     factory = BUILTIN_PACKS.get(name)
     if factory is None:
-        raise HTTPException(status_code=404, detail="pack no encontrado")
+        raise HTTPException(status_code=404, detail="pack not found")
     s = import_pack(db, factory(), activate)
     return {"id": s.id, "name": s.name, "isActive": s.is_active}
 
@@ -78,7 +78,7 @@ def import_builtin(name: str, activate: bool = Query(False), db: Session = Depen
 @router.post("/import")
 def import_scenario(activate: bool = Query(False), pack: dict = Body(...), db: Session = Depends(get_session)) -> dict:
     if not pack.get("name"):
-        raise HTTPException(status_code=400, detail="pack JSON inválido: falta 'name'")
+        raise HTTPException(status_code=400, detail="invalid pack JSON: missing 'name'")
     s = import_pack(db, pack, activate)
     return {"id": s.id, "name": s.name, "isActive": s.is_active}
 
@@ -87,7 +87,7 @@ def import_scenario(activate: bool = Query(False), pack: dict = Body(...), db: S
 def export_scenario(scenario_id: int, db: Session = Depends(get_session)) -> dict:
     pack = export_pack(db, scenario_id)
     if pack is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     return pack
 
 
@@ -95,7 +95,7 @@ def export_scenario(scenario_id: int, db: Session = Depends(get_session)) -> dic
 def get_scenario(scenario_id: int, db: Session = Depends(get_session)) -> ScenarioDetail:
     s = db.get(Scenario, scenario_id)
     if s is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     nodes = db.scalars(
         select(ScenarioNode)
         .where(ScenarioNode.scenario_id == scenario_id)
@@ -115,7 +115,7 @@ def get_scenario(scenario_id: int, db: Session = Depends(get_session)) -> Scenar
 def activate(scenario_id: int, db: Session = Depends(get_session)) -> dict:
     s = db.get(Scenario, scenario_id)
     if s is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     for other in db.scalars(select(Scenario).where(Scenario.is_active.is_(True))):
         other.is_active = False
     s.is_active = True
@@ -127,7 +127,7 @@ def activate(scenario_id: int, db: Session = Depends(get_session)) -> dict:
 def deactivate(scenario_id: int, db: Session = Depends(get_session)) -> dict:
     s = db.get(Scenario, scenario_id)
     if s is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     s.is_active = False
     db.commit()
     return {"id": s.id, "isActive": s.is_active}
@@ -137,18 +137,18 @@ def deactivate(scenario_id: int, db: Session = Depends(get_session)) -> dict:
 def delete_scenario(scenario_id: int, db: Session = Depends(get_session)) -> Response:
     s = db.get(Scenario, scenario_id)
     if s is not None:
-        db.delete(s)  # cascade borra nodos y credenciales
+        db.delete(s)  # cascade deletes nodes and credentials
         db.commit()
     return Response(status_code=204)
 
 
-# ---- nodos ----
+# ---- nodes ----
 
 
 @router.post("/{scenario_id}/nodes", response_model=ScenarioNodeDto)
 def add_node(scenario_id: int, body: ScenarioNodeInput, db: Session = Depends(get_session)) -> ScenarioNodeDto:
     if db.get(Scenario, scenario_id) is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     n = ScenarioNode(scenario_id=scenario_id, **body.model_dump())
     db.add(n)
     db.commit()
@@ -159,7 +159,7 @@ def add_node(scenario_id: int, body: ScenarioNodeInput, db: Session = Depends(ge
 def update_node(node_id: int, body: ScenarioNodeInput, db: Session = Depends(get_session)) -> ScenarioNodeDto:
     n = db.get(ScenarioNode, node_id)
     if n is None:
-        raise HTTPException(status_code=404, detail="nodo no encontrado")
+        raise HTTPException(status_code=404, detail="node not found")
     for k, v in body.model_dump().items():
         setattr(n, k, v)
     db.commit()
@@ -183,7 +183,7 @@ def add_cred(
     scenario_id: int, body: ScenarioCredentialInput, db: Session = Depends(get_session)
 ) -> ScenarioCredentialDto:
     if db.get(Scenario, scenario_id) is None:
-        raise HTTPException(status_code=404, detail="escenario no encontrado")
+        raise HTTPException(status_code=404, detail="scenario not found")
     c = ScenarioCredential(scenario_id=scenario_id, **body.model_dump())
     db.add(c)
     db.commit()
@@ -196,7 +196,7 @@ def update_cred(
 ) -> ScenarioCredentialDto:
     c = db.get(ScenarioCredential, cred_id)
     if c is None:
-        raise HTTPException(status_code=404, detail="credencial no encontrada")
+        raise HTTPException(status_code=404, detail="credential not found")
     for k, v in body.model_dump().items():
         setattr(c, k, v)
     db.commit()

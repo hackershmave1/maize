@@ -1,4 +1,4 @@
-"""Cebo escaso realista (Fase C): un .env.bak con UNA credencial → consola ops oculta."""
+"""Sparse realistic lure (Phase C): a .env.bak with ONE credential -> hidden ops console."""
 
 from moqesh.db import SessionLocal, init_db
 from moqesh.scenarios import (
@@ -34,7 +34,7 @@ def test_env_bak_leaks_one_token_and_hints_console():
     assert hit and hit.status == 200
     body = hit.body.decode()
     assert "OPS_API_TOKEN=" in body and "/internal/ops" in body
-    assert "***REDACTED***" in body  # la contraseña de DB NO se filtra; solo el token de ops es vivo
+    assert "***REDACTED***" in body  # the DB password does NOT leak; only the ops token is live
 
 
 def test_ops_console_requires_token():
@@ -50,14 +50,14 @@ def test_planted_token_opens_console_and_flags_reuse():
     eng = ScenarioEngine()
     env = eng.resolve(data, ctx, _req("/.env.bak")).body.decode()
     token = next(line.split("=", 1)[1] for line in env.splitlines() if line.startswith("OPS_API_TOKEN="))
-    assert token and token != "{{cred:ops_token}}"  # el placeholder se sustituyó por el secreto real
+    assert token and token != "{{cred:ops_token}}"  # the placeholder was replaced by the real secret
     ok = eng.resolve(data, ctx, _req("/internal/ops", {"authorization": f"Bearer {token}"}))
     assert ok and ok.status == 200
     assert ok.used_planted_cred_key == "ops_token"  # dispara credential_reuse
-    assert b"Ops Console" in ok.body and b"FLAG{" not in ok.body  # realista, sin FLAG de CTF
+    assert b"Ops Console" in ok.body and b"FLAG{" not in ok.body  # realistic, no CTF FLAG
 
 
-# --- Cebo colocado en la RUTA DE CAZA (alias que el agente realmente enumera) ---
+# --- Lure placed on the HUNTING PATH (aliases the agent really enumerates) ---
 
 
 def _ops_token(data, ctx, eng, from_path="/.env"):
@@ -73,7 +73,7 @@ def test_env_backup_aliases_all_leak_same_token():
     for p in ("/.env", "/env.bak", "/api/env.bak", "/internal/env.bak"):
         hit = eng.resolve(data, ctx, _req(p))
         assert hit and hit.status == 200, p
-        assert _ops_token(data, ctx, eng, p) == canonical  # el MISMO token vivo en cada alias
+        assert _ops_token(data, ctx, eng, p) == canonical  # the SAME live token on every alias
 
 
 def test_ops_gate_aliases_require_and_accept_token():
@@ -83,9 +83,9 @@ def test_ops_gate_aliases_require_and_accept_token():
     token = _ops_token(data, ctx, eng)
     for p in ("/ops", "/ops/login", "/admin", "/console", "/api/login", "/auth/login", "/login"):
         denied = eng.resolve(data, ctx, _req(p))
-        assert denied and denied.status == 401 and denied.failed_auth, p  # sin token -> 401 (y auth_bruteforce)
+        assert denied and denied.status == 401 and denied.failed_auth, p  # no token -> 401 (and auth_bruteforce)
         ok = eng.resolve(data, ctx, _req(p, {"authorization": f"Bearer {token}"}))
-        assert ok and ok.status == 200 and ok.used_planted_cred_key == "ops_token", p  # reuse en cualquier alias
+        assert ok and ok.status == 200 and ok.used_planted_cred_key == "ops_token", p  # reuse on any alias
 
 
 def test_robots_discloses_ops_console():
@@ -94,10 +94,10 @@ def test_robots_discloses_ops_console():
     hit = ScenarioEngine().resolve(data, ctx, _req("/robots.txt"))
     assert hit and hit.status == 200
     body = hit.body.decode()
-    assert "/internal/ops" in body and "Disallow:" in body  # el lure que lleerá el agente
+    assert "/internal/ops" in body and "Disallow:" in body  # the lure the agent will read
 
 
 def test_bait_keeps_single_live_credential():
     data = _active_data()
-    # Invariante de cebo ESCASO: muchos alias, pero UNA sola credencial viva (un token).
+    # SPARSE-lure invariant: many aliases, but ONE single live credential (one token).
     assert len(data.credentials) == 1 and data.credentials[0].key == "ops_token"

@@ -1,6 +1,6 @@
-"""Worldsmith (Fase D): validador de inertness bulletproof, capa de herramientas, y build
-end-to-end con el proveedor stub (sin coste). Verifica también que un fichero ejecutable
-colado por fuera de las herramientas NO llega a publicarse."""
+"""Worldsmith (Phase D): bulletproof inertness validator, tool layer, and an
+end-to-end build with the stub provider (zero cost). Also checks that an executable file
+slipped in outside the tools is NOT published."""
 
 import os
 
@@ -66,7 +66,7 @@ def test_validate_file_size_limit():
 
 def test_validate_manifest():
     assert validate_manifest({"mounts": [{"prefix": "/", "dir": "sites/a"}]}, {"sites/a"}) == []
-    assert validate_manifest({"mounts": []}, set())  # vacío -> problema
+    assert validate_manifest({"mounts": []}, set())  # empty -> problem
     assert validate_manifest({"mounts": [{"prefix": "/", "dir": "../esc"}]}, set())  # escapa
     assert validate_manifest({"mounts": [{"prefix": "/", "dir": "sites/missing"}]}, set())  # no existe
 
@@ -91,7 +91,7 @@ def test_validate_tree_flags_bad_file(tmp_path):
 def test_sandbox_write_and_reject(tmp_path):
     sb = BuildSandbox(root=str(tmp_path / "build"), seed_dir=str(tmp_path / "seed"))
     assert sb.write_file("sites/a/index.html", "<!doctype html><title>x</title>")["ok"]
-    assert not sb.write_file("x.php", "<?php ?>")["ok"]  # extensión
+    assert not sb.write_file("x.php", "<?php ?>")["ok"]  # extension
     assert not sb.write_file("../escape.html", "x")["ok"]  # traversal
     bad = sb.write_file("sites/a/x.html", "<script src='https://cdn/x.js'></script>")
     assert not bad["ok"] and bad.get("reasons")
@@ -99,7 +99,7 @@ def test_sandbox_write_and_reject(tmp_path):
 
 def test_plant_bait_single_credential_and_placeholder(tmp_path):
     sb = BuildSandbox(root=str(tmp_path / "b"), seed_dir=str(tmp_path / "s"))
-    # sin el placeholder {{cred:KEY}} -> rechazo
+    # without the {{cred:KEY}} placeholder -> rejected
     assert not sb.plant_bait("ops_token", ["/.env"], "NO_TOKEN_HERE", ["/ops"], "<h1>ops</h1>")["ok"]
     out = sb.plant_bait(
         "ops_token",
@@ -129,15 +129,15 @@ def test_stub_build_publishes_valid_world_and_imports_bait(tmp_path):
     world_path = str(tmp_path / "world")
     report = build_world(provider=StubProvider(), world_path=world_path, brand="Testco", import_bait=True)
     assert report["ok"] and report["published"]
-    # El World publicado valida y sirve bytes reales.
+    # The published World validates and serves real bytes.
     assert validate_tree(world_path) == []
     w = World(world_path)
     assert w.active
     assert w.resolve("/") and b"Testco" in w.resolve("/").body
     assert w.resolve("/docs/") is not None
     assert w.resolve("/status/api/summary.json") is not None
-    assert w.resolve("/nope-xyz-123") is None  # lo ausente -> 404
-    # El cebo se importó como escenario activo y dispara credential_reuse al reusar el token.
+    assert w.resolve("/nope-xyz-123") is None  # anything absent -> 404
+    # The lure was imported as the active scenario and fires credential_reuse when the token is reused.
     assert report["bait"]["ok"] and report["bait"]["active"]
     with SessionLocal() as db:
         data = load_active(db)
@@ -150,8 +150,8 @@ def test_stub_build_publishes_valid_world_and_imports_bait(tmp_path):
 
 
 class _LeakyProvider:
-    """Escribe un árbol válido vía herramientas y además cuela un .html ejecutable directo a disco
-    (simula un proveedor CLI que no pasó por la validación por-escritura)."""
+    """Write a valid tree via the tools and also slip an executable .html straight to disk
+    (simulates a CLI provider that skipped per-write validation)."""
 
     def build(self, sandbox, system_prompt, brief):
         StubProvider().build(sandbox, system_prompt, brief)
@@ -161,7 +161,7 @@ class _LeakyProvider:
 
 
 def test_api_provider_tool_use_loop(tmp_path):
-    """El bucle tool-use del ApiProvider ejecuta herramientas y realimenta resultados (sin red real)."""
+    """The ApiProvider's tool-use loop runs tools and feeds results back (no real network)."""
     import httpx
 
     sb = BuildSandbox(root=str(tmp_path / "b"), seed_dir=str(tmp_path / "s"))
@@ -230,7 +230,7 @@ def test_api_provider_tool_use_loop(tmp_path):
 
 
 def test_claude_cli_ingest_bait_convention(tmp_path):
-    """El provider CLI ingiere _worldsmith_bait.json por nuestro plant_bait validado y lo borra."""
+    """The CLI provider ingests _worldsmith_bait.json through our validated plant_bait and deletes it."""
     import json as _json
 
     root = tmp_path / "b"
@@ -253,7 +253,7 @@ def test_claude_cli_ingest_bait_convention(tmp_path):
     res = ClaudeCliProvider().ingest(sb)
     assert res["ok"]
     assert sb.bait_pack and sb.bait_pack["credentials"][0]["key"] == "ops_token"
-    assert not (root / "_worldsmith_bait.json").exists()  # artefacto borrado (no se publica)
+    assert not (root / "_worldsmith_bait.json").exists()  # artifact deleted (not published)
     assert "sites/c/index.html" in sb.files
     assert "manifest.json" not in sb.files and "_worldsmith_bait.json" not in sb.files
 
@@ -263,4 +263,4 @@ def test_build_does_not_publish_when_final_validation_fails(tmp_path):
     report = build_world(provider=_LeakyProvider(), world_path=world_path, brand="X", import_bait=False)
     assert report["ok"] is False and report["published"] is False
     assert any("evil.html" in p for p in report["problems"])
-    assert not os.path.exists(os.path.join(world_path, "manifest.json"))  # World en vivo intacto
+    assert not os.path.exists(os.path.join(world_path, "manifest.json"))  # live World intact

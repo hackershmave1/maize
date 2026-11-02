@@ -17,7 +17,7 @@ export function Requests() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Requests</h1>
-        <p className="text-sm text-fg-muted mt-1">Todas las interacciones con los honeypots</p>
+        <p className="text-sm text-fg-muted mt-1">All interactions with the honeypots</p>
       </div>
 
       <div className="bg-surface rounded-lg border border-border overflow-hidden">
@@ -57,7 +57,7 @@ export function Requests() {
                 </tr>
               ))}
               {requests.length === 0 && !loading && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-fg-muted text-sm">Sin requests registrados</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-fg-muted text-sm">No requests recorded</td></tr>
               )}
             </tbody>
           </table>

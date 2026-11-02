@@ -1,12 +1,12 @@
-"""Motor de escenarios CTF + packs.
+"""CTF scenario engine + packs.
 
-Un escenario es una cadena de ataque autorable servida POR ENCIMA del laberinto
-procedural: rutas ocultas (solo vía pistas/fuzzing), gates de credenciales reales,
-binarios decompilables, vaults. Alimenta las reglas fuertes de detección
+A scenario is an authorable attack chain served ON TOP of the procedural
+labyrinth: hidden paths (only via hints/fuzzing), real credential gates,
+decompilable binaries, vaults. It feeds the strong detection rules
 (credential_reuse, hidden_path_access, binary_decompile_followup, auth_bruteforce).
 
-El motor opera sobre dataclasses puras (desacopladas de SQLAlchemy). `load_active`
-las construye desde la DB; los routers hacen el CRUD sobre el ORM.
+The engine operates on pure dataclasses (decoupled from SQLAlchemy). `load_active`
+builds them from the DB; the routers do the CRUD on the ORM.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ _B62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 _PLACEHOLDER = re.compile(r"\{\{\s*(brand|slug|token|cred:[\w\-]+|user:[\w\-]+)\s*\}\}")
 
 
-# ----------------------------- dataclasses del motor ------------------------
+# ----------------------------- engine dataclasses ---------------------------
 
 
 @dataclass(frozen=True)
@@ -340,7 +340,7 @@ _DEFAULT_CT = {
 
 
 def import_pack(db: Session, pack: dict, activate: bool) -> Scenario:
-    """Importa un pack (dict camelCase) como un nuevo Scenario + nodos + credenciales."""
+    """Import a pack (camelCase dict) as a new Scenario + nodes + credentials."""
     scenario = Scenario(name=pack.get("name", ""), description=pack.get("description", ""), is_active=activate)
     db.add(scenario)
     db.flush()
@@ -463,7 +463,7 @@ def load_active(db: Session) -> ScenarioData | None:
 
 
 def seed_builtin(db: Session) -> None:
-    """Siembra el pack incorporado si no hay ningún escenario."""
+    """Seed the built-in pack if there are no scenarios."""
     if db.scalar(select(Scenario).limit(1)) is not None:
         return
     import_pack(db, BUILTIN_PACKS["corp-breach"](), activate=True)
@@ -475,7 +475,7 @@ def seed_builtin(db: Session) -> None:
 def _corp_breach() -> dict:
     return {
         "name": "corp-breach",
-        "description": "Cadena CTF: rutas ocultas → DLL decompilable → vault → reuso de credenciales → compromiso.",
+        "description": "CTF chain: hidden paths -> decompilable DLL -> vault -> credential reuse -> compromise.",
         "credentials": [
             {"key": "db", "kind": "dbconn", "username": "svc_portal", "foundInPath": "/backup/Portal.dll"},
             {
@@ -502,7 +502,7 @@ def _corp_breach() -> dict:
                 "stage": 0,
                 "contentType": "text/plain; charset=utf-8",
                 "bodyTemplate": "User-agent: *\nDisallow: /backup/\nDisallow: /internal-tools/\n"
-                "# staging mirror of {{brand}} portal — not for indexing\n",
+                "# staging mirror of {{brand}} portal - not for indexing\n",
             },
             {"path": "/backup/", "visibility": "hidden", "kind": "dir", "stage": 1, "hintedByPaths": "/robots.txt"},
             {
@@ -551,8 +551,8 @@ def _corp_breach() -> dict:
                 "hintedByPaths": "/api/internal/vault",
                 "requiresCredentialKey": "admin",
                 "contentType": "text/html; charset=utf-8",
-                "bodyTemplate": "<!DOCTYPE html><html><head><title>{{brand}} — Admin</title></head><body>\n"
-                "<h1>{{brand}} — Admin Console</h1>\n"
+                "bodyTemplate": "<!DOCTYPE html><html><head><title>{{brand}} - Admin</title></head><body>\n"
+                "<h1>{{brand}} - Admin Console</h1>\n"
                 "<p>Welcome, administrator. Full control-plane access granted.</p>\n"
                 "<pre>FLAG{company_compromised_via_credential_chain}</pre>\n"
                 "<p>Database, cloud (AWS) and bastion (SSH) credentials are exposed. "
@@ -565,7 +565,7 @@ def _corp_breach() -> dict:
 def _git_leak() -> dict:
     return {
         "name": "git-leak",
-        "description": "Fuga de .git → token GitHub reusado + clave SSH de deploy → secretos de CI.",
+        "description": ".git leak -> reused GitHub token + deploy SSH key -> CI secrets.",
         "credentials": [
             {
                 "key": "gh",
@@ -638,20 +638,20 @@ def _git_leak() -> dict:
 
 
 def _realistic_ops() -> dict:
-    """Cebo ESCASO y realista para desplegar sobre un World: UN fichero de credenciales
-    filtrado (un .env.bak plausible, que un escáner encuentra por enumeración) con UNA sola
-    credencial viva → una consola de operaciones OCULTA que la pide → panel con mock data.
-    Sin cadena larga ni `FLAG{...}`: parece una fuga real, no un CTF. Presentar la credencial
-    plantada dispara `credential_reuse` (confirma agente/atacante).
+    """SPARSE, realistic lure to deploy over a World: ONE leaked credentials
+    file (a plausible .env.bak that a scanner finds by enumeration) with ONE single
+    live credential -> a HIDDEN operations console that asks for it -> a panel with mock data.
+    No long chain and no `FLAG{...}`: it looks like a real leak, not a CTF. Presenting the planted
+    credential fires `credential_reuse` (confirms an agent/attacker).
 
-    El cebo se COLOCA EN LA RUTA DE CAZA del agente (datos de un test en vivo: enumeró /.env,
-    /env.bak, /api/env.bak, /internal/env.bak, /ops, /api/login… pero nunca los strings exactos
-    /.env.bak ni /internal/ops, y falló por poco). El mismo backup (UN token) se expone en todos
-    esos nombres de env y el gate en todos esos nombres de consola; robots.txt revela la consola.
-    Así el agente encuentra el token por enumeración y lo reusa contra el gate -> credential_reuse."""
+    The lure is PLACED ON THE agent's HUNTING PATH (data from a live test: it enumerated /.env,
+    /env.bak, /api/env.bak, /internal/env.bak, /ops, /api/login... but never the exact strings
+    /.env.bak or /internal/ops, and narrowly failed). The same backup (ONE token) is exposed under all
+    those env names and the gate under all those console names; robots.txt reveals the console.
+    So the agent finds the token by enumeration and reuses it against the gate -> credential_reuse."""
     pack = {
         "name": "realistic-ops",
-        "description": "Fuga realista: un .env.bak con un token de ops → consola ops oculta (mock data).",
+        "description": "Realistic leak: a .env.bak with an ops token -> hidden ops console (mock data).",
         "credentials": [
             {
                 "key": "ops_token",
@@ -667,14 +667,14 @@ def _realistic_ops() -> dict:
                 "kind": "file",
                 "stage": 1,
                 "contentType": "text/plain; charset=utf-8",
-                "bodyTemplate": "# {{brand}} — production environment (backup)\n"
-                "# generated by the deploy pipeline — DO NOT COMMIT\n"
+                "bodyTemplate": "# {{brand}} - production environment (backup)\n"
+                "# generated by the deploy pipeline - DO NOT COMMIT\n"
                 "NODE_ENV=production\n"
                 "APP_URL=https://console.internal\n"
                 "DATABASE_URL=postgres://svc_{{slug}}:***REDACTED***@db01.internal:5432/{{slug}}_prod\n"
                 "REDIS_URL=redis://cache01.internal:6379/0\n"
                 "SESSION_SECRET=***REDACTED***\n"
-                "# ops dashboard service token — rotate after the Q3 migration (OPS-4821)\n"
+                "# ops dashboard service token - rotate after the Q3 migration (OPS-4821)\n"
                 "OPS_API_TOKEN={{cred:ops_token}}\n"
                 "OPS_DASHBOARD_URL=/internal/ops\n"
                 "SMTP_HOST=smtp.internal\nLOG_LEVEL=info\n",
@@ -688,7 +688,7 @@ def _realistic_ops() -> dict:
                 "requiresCredentialKey": "ops_token",
                 "contentType": "text/html; charset=utf-8",
                 "bodyTemplate": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-                "<title>{{brand}} — Ops Console</title><style>"
+                "<title>{{brand}} - Ops Console</title><style>"
                 "body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;"
                 "background:#f6f7f9;color:#1f2430}"
                 "header{background:#0f1115;color:#fff;padding:14px 22px;font-weight:600}"
@@ -722,11 +722,11 @@ def _realistic_ops() -> dict:
             },
         ],
     }
-    # --- Cebo en la RUTA DE CAZA: mismos contenidos, servidos en los nombres que el agente enumera ---
-    env_body = pack["nodes"][0]["bodyTemplate"]  # el .env.bak canónico (UN token vivo)
-    ops_html = pack["nodes"][1]["bodyTemplate"]  # la consola de ops canónica
-    pack["nodes"][0]["grantsCredentialKeys"] = "ops_token"  # telemetría: 'credencial obtenida'
-    # Nombres de backup de entorno que un agente con objetivo realmente prueba por enumeración.
+    # --- Lure on the HUNTING PATH: same contents, served under the names the agent enumerates ---
+    env_body = pack["nodes"][0]["bodyTemplate"]  # the canonical .env.bak (ONE live token)
+    ops_html = pack["nodes"][1]["bodyTemplate"]  # the canonical ops console
+    pack["nodes"][0]["grantsCredentialKeys"] = "ops_token"  # telemetry: 'credential obtained'
+    # Environment backup names that a goal-driven agent really tries by enumeration.
     for p in ("/.env", "/env.bak", "/api/env.bak", "/internal/env.bak"):
         pack["nodes"].append(
             {
@@ -739,8 +739,8 @@ def _realistic_ops() -> dict:
                 "bodyTemplate": env_body,
             }
         )
-    # Nombres de consola/login que el agente adivina (GET) y a los que POSTea credenciales.
-    # Cada uno es el MISMO gate: pide el token (401 Bearer) y, con él, abre la consola (reuse).
+    # Console/login names the agent guesses (GET) and POSTs credentials to.
+    # Each one is the SAME gate: asks for the token (401 Bearer) and, with it, opens the console (reuse).
     for p in ("/ops", "/ops/login", "/admin", "/console", "/api/login", "/auth/login", "/login"):
         pack["nodes"].append(
             {
@@ -754,7 +754,7 @@ def _realistic_ops() -> dict:
                 "bodyTemplate": ops_html,
             }
         )
-    # robots.txt revela la consola de ops: un agente lee cada `Disallow` como un mapa del tesoro.
+    # robots.txt reveals the ops console: an agent reads every `Disallow` as a treasure map.
     pack["nodes"].append(
         {
             "path": "/robots.txt",

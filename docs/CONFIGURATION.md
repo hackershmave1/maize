@@ -1,144 +1,144 @@
-# Configuración
+# Configuration
 
-Toda la configuración se lee del entorno con prefijo `MOQESH_` (o de un fichero
-`.env` en el directorio de trabajo). Plantilla: [`.env.example`](../.env.example).
+All configuration is read from the environment with the `MOQESH_` prefix (or from a
+`.env` file in the working directory). Template: [`.env.example`](../.env.example).
 
-## Almacenamiento
+## Storage
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_DB_PATH` | `moqesh.db` | Ruta del SQLite. En Docker: `/app/data/moqesh.db`. |
-| `MOQESH_WEB_DIST` | *(auto)* | Ruta al build del frontend. Auto si está junto al paquete (`web/dist`). |
+| `MOQESH_DB_PATH` | `moqesh.db` | SQLite path. In Docker: `/app/data/moqesh.db`. |
+| `MOQESH_WEB_DIST` | *(auto)* | Path to the frontend build. Auto if it sits next to the package (`web/dist`). |
 
-## Red
+## Network
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_HONEYPOT_PORT` | `8080` | Puerto del honeypot (el laberinto servido a los agentes). |
-| `MOQESH_DASHBOARD_PORT` | `5000` | Puerto del dashboard + API + WebSocket + ingestión. |
-| `MOQESH_PUBLIC_URL` | *(vacío)* | URL pública del servidor a la que se conectan los sensores remotos. Imprescindible para el onboarding de sensores. |
+| `MOQESH_HONEYPOT_PORT` | `8080` | Honeypot port (the labyrinth served to agents). |
+| `MOQESH_DASHBOARD_PORT` | `5000` | Port for the dashboard + API + WebSocket + ingestion. |
+| `MOQESH_PUBLIC_URL` | *(empty)* | Public URL of the server that remote sensors connect to. Required for sensor onboarding. |
 
-## Generación de contenido
+## Content generation
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_SEED` | *(auto)* | Semilla del deployment. Vacío = se genera una (anti-fingerprint). |
+| `MOQESH_SEED` | *(auto)* | Deployment seed. Empty = one is generated (anti-fingerprint). |
 | `MOQESH_GENERATION_MODE` | `Template` | `Template` \| `Mimic` \| `Static`. |
-| `MOQESH_TARGET_URL` | *(vacío)* | Sitio real a imitar (solo `Mimic`). |
-| `MOQESH_SITE_PROFILE` | *(vacío)* | Perfil built-in (`saas`\|`corp`\|`ecommerce`\|`nonprofit`): rutas, vocabulario y colecciones de API realistas sin crawlear. Vacío = genérico por seed. En `Mimic` manda el crawl de `TARGET_URL`. Genera más con `scripts/build_profile.py`. |
-| `MOQESH_REALISM_LEVEL` | `3` | 1 (poco cebo) .. 5 (cebo denso). |
-| `MOQESH_VOCABULARY_THEME` | *(auto)* | `corporate` \| `devops` \| `saas` \| `ecommerce`. Vacío = por seed. |
-| `MOQESH_BRAND_NAME` | *(auto)* | Marca ficticia. Vacío = derivada del seed. |
-| `MOQESH_TARPIT_DELAY_MS` | `0` | Retardo fijo base por respuesta (ms). Se suma al tarpit adaptativo. |
-| `MOQESH_ADAPTIVE_TARPIT` | `true` | Retardo que crece con la intensidad de la sesión (coherente→cebo). 0 a intensidad 0 (humano/desconocido); sube solo con agente confirmado. |
-| `MOQESH_TARPIT_MAX_MS` | `6000` | Retardo máximo por respuesta a intensidad 3 (agente confirmado). |
-| `MOQESH_ALLOW_INFINITE_ON_CONFIRMED` | `false` | Opt-in de quema bruta: a intensidad máxima la API vuelve a paginar sin fin. Rompe el invariante de coherencia (vuelve a ser fingerprinteable), por eso OFF por defecto. |
-| `MOQESH_SERVER_BANNER` | `nginx` | Banner `Server`. `nginx` = se deriva del seed. |
-| `MOQESH_TOKEN_EXHAUST_ENABLED` | `true` | Activa el laberinto Token Exhaust (finito y coherente; **legacy**: OFF de facto cuando hay World activo). |
-| `MOQESH_WORLD_ENABLED` | `true` | Sirve el **World**: contenido estático INERTE multi-sitio (ficheros reales en disco; solo bytes, nunca ejecuta). Fuente primaria; sustituye al laberinto generado. |
-| `MOQESH_WORLD_PATH` | *(auto)* | Ruta del World. Vacío = `<dir de la DB>/world` (volumen persistente). |
-| `MOQESH_WORLD_AUTOSEED` | `true` | Si el World está vacío, copia la semilla curada de portales empaquetada. |
-| `MOQESH_SCENARIOS_ENABLED` | `false` | Sirve el escenario activo (gate de reuso de credencial, se resuelve ANTES del World). `false` = sin cebo activo (solo el World/laberinto). `true` = cebo activo. Packs builtin: `realistic-ops` (recomendado con World: **un** `.env.bak` filtrado → consola ops oculta con mock data, sin pinta de CTF), `corp-breach`/`git-leak` (cadenas tipo CTF). Actívalo con `POST /api/scenarios/builtins/realistic-ops?activate=true`. |
+| `MOQESH_TARGET_URL` | *(empty)* | Real site to mimic (`Mimic` only). |
+| `MOQESH_SITE_PROFILE` | *(empty)* | Built-in profile (`saas`\|`corp`\|`ecommerce`\|`nonprofit`): realistic paths, vocabulary and API collections without crawling. Empty = generic by seed. In `Mimic`, the `TARGET_URL` crawl wins. Generate more with `scripts/build_profile.py`. |
+| `MOQESH_REALISM_LEVEL` | `3` | 1 (little lure) .. 5 (dense lure). |
+| `MOQESH_VOCABULARY_THEME` | *(auto)* | `corporate` \| `devops` \| `saas` \| `ecommerce`. Empty = by seed. |
+| `MOQESH_BRAND_NAME` | *(auto)* | Fictional brand. Empty = derived from the seed. |
+| `MOQESH_TARPIT_DELAY_MS` | `0` | Fixed base delay per response (ms). Added to the adaptive tarpit. |
+| `MOQESH_ADAPTIVE_TARPIT` | `true` | Delay that grows with session intensity (coherent -> lure). 0 at intensity 0 (human/unknown); it only rises with a confirmed agent. |
+| `MOQESH_TARPIT_MAX_MS` | `6000` | Max delay per response at intensity 3 (confirmed agent). |
+| `MOQESH_ALLOW_INFINITE_ON_CONFIRMED` | `false` | Brute-burn opt-in: at max intensity the API paginates endlessly again. Breaks the coherence invariant (it becomes fingerprintable again), so it is OFF by default. |
+| `MOQESH_SERVER_BANNER` | `nginx` | `Server` banner. `nginx` = derived from the seed. |
+| `MOQESH_TOKEN_EXHAUST_ENABLED` | `true` | Enables the Token Exhaust labyrinth (finite and coherent; **legacy**: effectively OFF when a World is active). |
+| `MOQESH_WORLD_ENABLED` | `true` | Serves the **World**: multi-site INERT static content (real files on disk; only bytes, never executed). The primary source; replaces the generated labyrinth. |
+| `MOQESH_WORLD_PATH` | *(auto)* | World path. Empty = `<DB dir>/world` (persistent volume). |
+| `MOQESH_WORLD_AUTOSEED` | `true` | If the World is empty, copy the packaged curated portal seed. |
+| `MOQESH_SCENARIOS_ENABLED` | `false` | Serves the active scenario (credential-reuse gate, resolved BEFORE the World). `false` = no active lure (only the World/labyrinth). `true` = active lure. Built-in packs: `realistic-ops` (recommended with a World: **one** leaked `.env.bak` -> hidden ops console with mock data, nothing that looks like a CTF), `corp-breach`/`git-leak` (CTF-style chains). Enable it with `POST /api/scenarios/builtins/realistic-ops?activate=true`. |
 
-### World: manifest y contenido voluminoso (genbig)
+### World: manifest and voluminous content (genbig)
 
-El `manifest.json` del World monta portales: `{"mounts": [{"prefix", "dir", "spa", "autoindex"}]}`.
-- **`autoindex: true`** → un directorio **sin `index.html`** sirve un **listado estilo servidor**
-  (señuelo de "directorio abierto") en vez de 404. Por defecto `false` (un dir sin index = 404).
-- Los ficheros estáticos **> 1 MiB se sirven en streaming** (Content-Length/Range reales, sin
-  leerlos en memoria): puedes servir árboles pesados sin agotar la RAM del honeypot.
+The World's `manifest.json` mounts portals: `{"mounts": [{"prefix", "dir", "spa", "autoindex"}]}`.
+- **`autoindex: true`** -> a directory **without `index.html`** serves a **server-style listing**
+  (an "open directory" decoy) instead of a 404. Default `false` (a dir without an index = 404).
+- Static files **> 1 MiB are streamed** (real Content-Length/Range, without
+  reading them into memory): you can serve heavy trees without exhausting the honeypot's RAM.
 
-Para rellenar un árbol voluminoso de **texto REAL** (quema de tokens finita, sin el delator del
-contenido generado/templado) usa [`scripts/genbig.py`](../scripts/genbig.py):
+To fill a voluminous tree with **REAL text** (finite token burn, without the giveaway of
+generated/templated content) use [`scripts/genbig.py`](../scripts/genbig.py):
 
 ```bash
-# /data con 50 ficheros de 10 MiB (texto de dominio público, cacheado en ~/.cache/genbig)
-python3 scripts/genbig.py <world>/sites/data --files 50 --size 10M --lang es
-# subdirs numéricos: /files/2023 /files/2024 /files/2025
+# /data with 50 files of 10 MiB (public-domain text, cached in ~/.cache/genbig)
+python3 scripts/genbig.py <world>/sites/data --files 50 --size 10M --lang en
+# numeric subdirs: /files/2023 /files/2024 /files/2025
 python3 scripts/genbig.py <world>/sites/files --files 60 --size 10M \
     --subdirs 3 --subdir-prefix "" --subdir-width 4 --subdir-start 2023
 ```
 
-Luego añade el mount con `autoindex` al `manifest.json` del World y reinicia el honeypot:
+Then add the mount with `autoindex` to the World's `manifest.json` and restart the honeypot:
 
 ```json
 { "prefix": "/data", "dir": "sites/data", "autoindex": true }
 ```
 
-La salida de genbig NO se commitea: vive en el volumen del World (`<dir de la DB>/world`).
+genbig's output is NOT committed: it lives in the World volume (`<DB dir>/world`).
 
-## Detección y alertas
+## Detection and alerts
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_ALERT_SCORE_THRESHOLD` | `0.5` | Score mínimo para alertar. |
-| `MOQESH_ALERT_MIN_REQUESTS` | `5` | Requests mínimos en la sesión para alertar. |
+| `MOQESH_ALERT_SCORE_THRESHOLD` | `0.5` | Minimum score to alert. |
+| `MOQESH_ALERT_MIN_REQUESTS` | `5` | Minimum requests in the session to alert. |
 
-## Bloqueo y notificaciones
+## Blocking and notifications
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_ENFORCE_BLOCK` | `true` | El honeypot responde 403 a IPs bloqueadas. |
-| `MOQESH_AUTO_BLOCK_SCORE` | `0.0` | Auto-bloqueo por score (0 = desactivado; `credential_reuse` siempre bloquea). |
-| `MOQESH_WEBHOOK_URL` | *(vacío)* | Webhook de notificación (firmado HMAC `X-Moqesh-Signature`). |
-| `MOQESH_WEBHOOK_SECRET` | *(vacío)* | Secreto para firmar el webhook. |
-| `MOQESH_ENABLE_IPTABLES` | `false` | Bloqueo OS-level opcional (OFF por defecto). |
+| `MOQESH_ENFORCE_BLOCK` | `true` | The honeypot answers 403 to blocked IPs. |
+| `MOQESH_AUTO_BLOCK_SCORE` | `0.0` | Score-based auto-block (0 = disabled; `credential_reuse` always blocks). |
+| `MOQESH_WEBHOOK_URL` | *(empty)* | Notification webhook (HMAC-signed via `X-Moqesh-Signature`). |
+| `MOQESH_WEBHOOK_SECRET` | *(empty)* | Secret for signing the webhook. |
+| `MOQESH_ENABLE_IPTABLES` | `false` | Optional OS-level blocking (OFF by default). |
 
-## Autenticación del dashboard (admin único)
+## Dashboard authentication (single admin)
 
-El dashboard/API (`/api/*`) queda detrás de una sesión por cookie firmada. El canal de
-sensores (`/ingest/*`, `/control`, `/s/*`, `/download/*`, `/healthz`) NO se ve afectado:
-conserva su autenticación HMAC propia.
+The dashboard/API (`/api/*`) sits behind a signed cookie session. The sensor channel
+(`/ingest/*`, `/control`, `/s/*`, `/download/*`, `/healthz`) is NOT affected:
+it keeps its own HMAC authentication.
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_ADMIN_USER` | `admin` | Usuario admin creado en el primer arranque. |
-| `MOQESH_ADMIN_PASSWORD` | *(vacío)* | Contraseña del admin. Vacío = se genera una y se imprime en el log **una vez**. |
-| `MOQESH_SESSION_SECRET` | *(vacío)* | Secreto de firma de la cookie. Vacío = se genera y persiste junto a la DB (estable por despliegue). |
-| `MOQESH_SESSION_MAX_AGE` | `86400` | Vida de la sesión en segundos. |
-| `MOQESH_COOKIE_SECURE` | `false` | `true` tras TLS (subdominio admin); `false` en local/túnel http. |
+| `MOQESH_ADMIN_USER` | `admin` | Admin user created on first startup. |
+| `MOQESH_ADMIN_PASSWORD` | *(empty)* | Admin password. Empty = one is generated and printed to the log **once**. |
+| `MOQESH_SESSION_SECRET` | *(empty)* | Cookie signing secret. Empty = generated and persisted next to the DB (stable per deployment). |
+| `MOQESH_SESSION_MAX_AGE` | `86400` | Session lifetime in seconds. |
+| `MOQESH_COOKIE_SECURE` | `false` | `true` behind TLS (admin subdomain); `false` locally/over an http tunnel. |
 
-Exposición: el dashboard se publica en un subdominio TLS propio (p.ej.
-`moqesh-admin.…`) tras el Caddy compartido — ver [`deploy/caddy-admin.snippet`](../deploy/caddy-admin.snippet) —
-y además sigue accesible por túnel SSH. Superficie separada del honeypot público.
+Exposure: the dashboard is published on its own TLS subdomain (e.g.
+`moqesh-admin.…`) behind the shared Caddy (see [`deploy/caddy-admin.snippet`](../deploy/caddy-admin.snippet))
+and also stays reachable over an SSH tunnel. A surface separate from the public honeypot.
 
-## Confirmación con IA (opcional)
+## AI confirmation (optional)
 
-El sistema funciona sin este módulo (modo heurístico).
+The system works without this module (heuristic mode).
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_AI_ENABLED` | `false` | Activa la confirmación en zona gris. |
-| `MOQESH_AI_PROVIDER` | `heuristic` | `heuristic` \| `openai` (endpoint OpenAI-compatible). |
-| `MOQESH_AI_BASE_URL` | *(vacío)* | Ej. `https://openrouter.ai/api/v1`. |
-| `MOQESH_AI_API_KEY` | *(vacío)* | Clave del proveedor. |
-| `MOQESH_AI_MODEL` | *(vacío)* | Ej. `anthropic/claude-haiku-5.5`. |
-| `MOQESH_AI_GRAY_ZONE_LOW` / `_HIGH` | `0.35` / `0.65` | Rango de score que dispara la confirmación. |
-| `MOQESH_AI_CONFIRM_THRESHOLD` | `0.7` | Confianza mínima para fijar veredicto. |
+| `MOQESH_AI_ENABLED` | `false` | Enables gray-zone confirmation. |
+| `MOQESH_AI_PROVIDER` | `heuristic` | `heuristic` \| `openai` (OpenAI-compatible endpoint). |
+| `MOQESH_AI_BASE_URL` | *(empty)* | E.g. `https://openrouter.ai/api/v1`. |
+| `MOQESH_AI_API_KEY` | *(empty)* | Provider key. |
+| `MOQESH_AI_MODEL` | *(empty)* | E.g. `anthropic/claude-haiku-5.5`. |
+| `MOQESH_AI_GRAY_ZONE_LOW` / `_HIGH` | `0.35` / `0.65` | Score range that triggers confirmation. |
+| `MOQESH_AI_CONFIRM_THRESHOLD` | `0.7` | Minimum confidence to set a verdict. |
 
-## Worldsmith (constructor IA del World)
+## Worldsmith (AI World builder)
 
-Agente de IA que construye/evoluciona el contenido inerte del World + el cebo. Se invoca bajo
-demanda (`python -m moqesh.worldsmith build|evolve`), no por petición. Guía:
+An AI agent that builds/evolves the World's inert content + the lure. It is invoked on
+demand (`python -m moqesh.worldsmith build|evolve`), not per request. Guide:
 [`docs/WORLDSMITH.md`](WORLDSMITH.md).
 
-| Variable | Default | Descripción |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `MOQESH_WORLDSMITH_PROVIDER` | `stub` | `stub` (determinista, sin IA) \| `api` (Anthropic tool-use) \| `claude_cli` (CLI por suscripción). |
-| `MOQESH_WORLDSMITH_MODEL` | *(vacío)* | Modelo del proveedor (p.ej. `claude-sonnet-4-5` para `api`; alias del CLI). |
-| `MOQESH_WORLDSMITH_API_KEY` | *(vacío)* | Clave para `provider=api`. Si vacío, cae a `MOQESH_AI_API_KEY`. |
-| `MOQESH_WORLDSMITH_BASE_URL` | `https://api.anthropic.com` | Endpoint de la Messages API (`api`). |
-| `MOQESH_WORLDSMITH_PORTALS` | `4` | Nº aproximado de portales a generar. |
-| `MOQESH_WORLDSMITH_BRAND` | *(vacío)* | Marca/identidad del sitio. Vacío = la deriva el agente desde el brief. |
+| `MOQESH_WORLDSMITH_PROVIDER` | `stub` | `stub` (deterministic, no AI) \| `api` (Anthropic tool use) \| `claude_cli` (subscription CLI). |
+| `MOQESH_WORLDSMITH_MODEL` | *(empty)* | Provider model (e.g. `claude-sonnet-4-5` for `api`; a CLI alias). |
+| `MOQESH_WORLDSMITH_API_KEY` | *(empty)* | Key for `provider=api`. If empty, falls back to `MOQESH_AI_API_KEY`. |
+| `MOQESH_WORLDSMITH_BASE_URL` | `https://api.anthropic.com` | Messages API endpoint (`api`). |
+| `MOQESH_WORLDSMITH_PORTALS` | `4` | Approximate number of portals to generate. |
+| `MOQESH_WORLDSMITH_BRAND` | *(empty)* | Site brand/identity. Empty = the agent derives it from the brief. |
 
-Para `claude_cli`, la autenticación sale del CLI o de `CLAUDE_CODE_OAUTH_TOKEN` (de
-`claude setup-token`), heredado por el subproceso. El proveedor va acotado a `Read,Write,Edit`
-sin bash ni red.
+For `claude_cli`, authentication comes from the CLI or from `CLAUDE_CODE_OAUTH_TOKEN` (from
+`claude setup-token`), inherited by the subprocess. The provider is confined to `Read,Write,Edit`
+with no bash or network.
 
-## Sensores remotos (en el servidor del cliente)
+## Remote sensors (on the customer's server)
 
-Estas variables las consume el **agente** o el **shipper agentless**, no el servidor central:
-`MOQESH_SERVER`, `MOQESH_KEY_ID`, `MOQESH_SECRET`, y (agente) `MOQESH_AGENT_PORT`,
+These variables are consumed by the **agent** or the **agentless shipper**, not the central server:
+`MOQESH_SERVER`, `MOQESH_KEY_ID`, `MOQESH_SECRET`, and (agent) `MOQESH_AGENT_PORT`,
 `MOQESH_CONTROL_INTERVAL`, `MOQESH_BEACON_JITTER`; (shipper) `MOQESH_LOG`, `MOQESH_BASE_PATH`,
-`MOQESH_FORMAT`, `MOQESH_STATE`, `MOQESH_DRY_RUN`. Detalle en
-[`moqesh/agent/BUILD.md`](../moqesh/agent/BUILD.md) y [`moqesh/clients/README.md`](../moqesh/clients/README.md).
+`MOQESH_FORMAT`, `MOQESH_STATE`, `MOQESH_DRY_RUN`. Details in
+[`moqesh/agent/BUILD.md`](../moqesh/agent/BUILD.md) and [`moqesh/clients/README.md`](../moqesh/clients/README.md).

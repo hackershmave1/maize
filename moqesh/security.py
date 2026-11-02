@@ -1,9 +1,9 @@
-"""Seguridad del canal sensor ↔ servidor.
+"""Security of the sensor <-> server channel.
 
-Autenticación simétrica por sensor: la misma clave (`api_secret`) firma en AMBOS
-sentidos (peticiones del nodo y respuestas de control), así un MITM sin la clave
-no puede forjar ni un envío ni un "disable". Más: ventana anti-replay, rate-limit
-y dedup en memoria. Toda ingestión se trata como HOSTIL.
+Symmetric per-sensor authentication: the same key (`api_secret`) signs in BOTH
+directions (node requests and control responses), so a MITM without the key
+can forge neither a delivery nor a "disable". Plus: an anti-replay window, rate limiting
+and in-memory dedup. All ingestion is treated as HOSTILE.
 """
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ import secrets
 import time
 from collections import OrderedDict
 
-CLOCK_SKEW_SECONDS = 300  # ventana anti-replay (y tolerancia de reloj)
+CLOCK_SKEW_SECONDS = 300  # anti-replay window (and clock tolerance)
 
 
 def new_credentials() -> tuple[str, str]:
-    """Devuelve (key_id, secret). El secret se muestra una sola vez."""
+    """Return (key_id, secret). The secret is shown only once."""
     return "mq_" + secrets.token_hex(8), secrets.token_urlsafe(32)
 
 
@@ -39,7 +39,7 @@ def verify(secret: str, timestamp: str, signature: str, body: bytes, now: float 
 
 
 class RateLimiter:
-    """Token-bucket en memoria por clave (p.ej. key_id)."""
+    """In-memory token bucket per key (e.g. key_id)."""
 
     def __init__(self, per_minute: int = 600, burst: int = 300) -> None:
         self._rate = per_minute / 60.0
@@ -58,7 +58,7 @@ class RateLimiter:
 
 
 class DedupCache:
-    """LRU de hashes vistos para descartar eventos/líneas repetidas."""
+    """LRU of seen hashes, to discard repeated events/lines."""
 
     def __init__(self, maxsize: int = 50_000) -> None:
         self._maxsize = maxsize
@@ -78,6 +78,6 @@ def event_hash(sensor_id: int, raw: str) -> str:
     return hashlib.sha256(f"{sensor_id}:{raw}".encode()).hexdigest()
 
 
-# Singletons del proceso (un solo servidor Moqesh).
+# Process singletons (a single Moqesh server).
 ingest_limiter = RateLimiter()
 dedup = DedupCache()

@@ -1,18 +1,18 @@
-# Dashboard admin de Moqesh — snippet de ejemplo para Caddy (reverse-proxy + TLS).
+# Moqesh admin dashboard: example Caddy snippet (reverse proxy + TLS).
 #
-# Expone el dashboard (puerto 5000 del contenedor moqesh-ai) en un subdominio TLS propio,
-# SEPARADO del honeypot público y del subdominio de sensores. La puerta es el login de
-# Moqesh (sesión por cookie); Caddy solo hace de reverse-proxy + TLS.
+# Exposes the dashboard (port 5000 of the moqesh-ai container) on its own TLS subdomain,
+# SEPARATE from the public honeypot and the sensors subdomain. The gate is the Moqesh
+# login (cookie session); Caddy only acts as reverse proxy + TLS.
 #
 # Requisitos:
-#   1) DNS:  A  moqesh-admin.example.com  ->  <IP de tu servidor>
-#   2) moqesh-ai alcanzable por tu Caddy (misma red Docker) y escuchando en :5000
-#      (añade la red externa de tu proxy al servicio `moqesh` — ver docker-compose.vps.yml).
-#   3) En el compose: MOQESH_COOKIE_SECURE=true y una contraseña de admin fijada
-#      (o leída UNA vez del log del contenedor).
+#   1) DNS:  A  moqesh-admin.example.com  ->  <your server's IP>
+#   2) moqesh-ai reachable by your Caddy (same Docker network) and listening on :5000
+#      (add your proxy's external network to the `moqesh` service; see docker-compose.vps.yml).
+#   3) In the compose file: MOQESH_COOKIE_SECURE=true and a fixed admin password
+#      (or read ONCE from the container log).
 #
-# Añade este bloque a tu Caddyfile y recarga Caddy. Ajusta el dominio y, si tu Caddy corre en
-# contenedor, el nombre del servicio (moqesh-ai) según tu red.
+# Add this block to your Caddyfile and reload Caddy. Adjust the domain and, if your Caddy runs in
+# a container, the service name (moqesh-ai) to match your network.
 
 moqesh-admin.example.com {
 	encode gzip zstd

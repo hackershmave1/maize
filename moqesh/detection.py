@@ -1,9 +1,9 @@
-"""Motor de scoring conductual.
+"""Behavioral scoring engine.
 
-Cada regla observa la secuencia de paths/timestamps de una sesión y suma su peso
-si dispara. Las reglas fuertes (credential_reuse, hidden_path_access,
-binary_decompile_followup, auth_bruteforce) se alimentan del motor de escenarios
-y llegan como señales externas (`extra_signals`).
+Each rule observes a session's sequence of paths/timestamps and adds its weight
+if it fires. The strong rules (credential_reuse, hidden_path_access,
+binary_decompile_followup, auth_bruteforce) are fed by the scenario engine
+and arrive as external signals (`extra_signals`).
 """
 
 from __future__ import annotations
@@ -138,12 +138,12 @@ def estimate_tokens(response_size: int) -> int:
 
 
 def intensity_for(session) -> int:
-    """Nivel de intensidad adaptativa (0..3) de una sesión, según su score acumulado.
+    """Adaptive intensity level (0..3) of a session, based on its accumulated score.
 
-    0 = desconocido/humano: el sitio se comporta como uno real finito (máximo sigilo).
-    1..3 = sospecha creciente -> más volumen de cebo COHERENTE (prosa/logs/migajas) + tarpit
-    mayor. Alineado con los umbrales de severidad de alerta (Low/Medium/High/Critical). La
-    intensidad nunca vuelve al laberinto incoherente ni infinito: solo "más sitio real".
+    0 = unknown/human: the site behaves like a real finite one (max stealth).
+    1..3 = growing suspicion -> more volume of COHERENT lure (prose/logs/breadcrumbs) + a bigger
+    tarpit. Aligned with the alert severity thresholds (Low/Medium/High/Critical). The
+    intensity never goes back to the incoherent or infinite labyrinth: only "more real site".
     """
     if session is None:
         return 0
@@ -166,7 +166,7 @@ def score_session(
     user_agent: str,
     extra_signals: dict[str, bool] | None = None,
 ) -> tuple[float, list[str]]:
-    """Evalúa reglas activas; devuelve (score acotado a 1.0, reglas disparadas)."""
+    """Evaluate active rules; return (score capped at 1.0, rules fired)."""
     extra = extra_signals or {}
     checks = {
         "timing_analysis": lambda: check_timing(timestamps),

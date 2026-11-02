@@ -1,9 +1,9 @@
-"""Tiempo real con WebSocket nativo (reemplazo de SignalR).
+"""Real time over native WebSocket (replacing SignalR).
 
-Un único `ConnectionManager` compartido en el proceso: el dashboard registra los
-WebSocket de los navegadores y el honeypot publica eventos (`request`, `alert`).
-Como el honeypot corre en el threadpool (endpoints sync), publica de forma
-thread-safe agendando el envío en el event loop ya capturado.
+A single `ConnectionManager` shared in the process: the dashboard registers the
+browsers' WebSockets and the honeypot publishes events (`request`, `alert`).
+Since the honeypot runs in the threadpool (sync endpoints), it publishes in a
+thread-safe way by scheduling the send on the already captured event loop.
 """
 
 from __future__ import annotations
@@ -40,12 +40,12 @@ class ConnectionManager:
                 self._active.discard(ws)
 
     async def apublish(self, event: str, data: dict) -> None:
-        """Publica desde un contexto async (p.ej. el propio dashboard)."""
+        """Publish from an async context (e.g. the dashboard itself)."""
         if self._active:
             await self._send_all(json.dumps({"event": event, "data": data}, default=str))
 
     def publish(self, event: str, data: dict) -> None:
-        """Publica desde un contexto sync/otro hilo (el honeypot). Fire-and-forget."""
+        """Publish from a sync context/another thread (the honeypot). Fire-and-forget."""
         if not self._active or self._loop is None:
             return
         msg = json.dumps({"event": event, "data": data}, default=str)
@@ -55,7 +55,7 @@ class ConnectionManager:
             pass
 
     def schedule(self, coro) -> None:
-        """Agenda una corrutina (webhook, confirmación IA) en el event loop, sin esperar."""
+        """Schedule a coroutine (webhook, AI confirmation) on the event loop, without waiting."""
         if self._loop is not None:
             try:
                 asyncio.run_coroutine_threadsafe(coro, self._loop)
@@ -65,7 +65,7 @@ class ConnectionManager:
         try:
             asyncio.run(coro)
         except Exception:
-            logger.debug("No se pudo agendar la corrutina en background", exc_info=True)
+            logger.debug("Could not schedule the coroutine in the background", exc_info=True)
 
 
 manager = ConnectionManager()

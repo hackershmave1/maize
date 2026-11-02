@@ -9,11 +9,11 @@ const navItems = [
   { to: '/requests', icon: List, label: 'Requests' },
   { to: '/sessions', icon: Users, label: 'Sessions' },
   { to: '/token-exhaust', icon: Flame, label: 'Token Exhaust' },
-  { to: '/scenarios', icon: Swords, label: 'Escenarios CTF' },
+  { to: '/scenarios', icon: Swords, label: 'CTF Scenarios' },
   { to: '/honeypots', icon: Hexagon, label: 'Honeypots' },
-  { to: '/sensors', icon: Radar, label: 'Sensores' },
+  { to: '/sensors', icon: Radar, label: 'Sensors' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
-  { to: '/blocks', icon: Ban, label: 'Bloqueos' },
+  { to: '/blocks', icon: Ban, label: 'Blocks' },
   { to: '/rules', icon: SlidersHorizontal, label: 'Rules' },
 ];
 
@@ -49,12 +49,12 @@ export function Sidebar() {
       <div className="p-3 border-t border-border space-y-2">
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="min-w-0">
-            <div className="text-xs font-medium truncate">{user?.username ?? '—'}</div>
+            <div className="text-xs font-medium truncate">{user?.username ?? '-'}</div>
             <div className="text-[10px] text-fg-muted uppercase tracking-wider">{user?.role ?? ''}</div>
           </div>
           <button
             onClick={() => { void logout(); }}
-            title="Cerrar sesión"
+            title="Sign out"
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-fg-muted hover:text-red hover:bg-surface-alt transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />

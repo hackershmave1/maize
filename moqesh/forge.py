@@ -1,14 +1,14 @@
-"""Forja de binarios señuelo con credenciales embebidas.
+"""Forge for decoy binaries with embedded credentials.
 
-Estrategia (elegida para evitar dependencia de .NET en runtime): se parte de una
-**plantilla .NET DLL pre-forjada offline** (ver `tools/build_template_dll.md`) que
-contiene literales-placeholder de ancho fijo; en runtime se **parchean los bytes**
-(UTF-16LE del heap de strings) con los valores reales del deployment, sin recompilar.
-El resultado es un DLL .NET válido y decompilable (dnSpy/ILSpy).
+Strategy (chosen to avoid a runtime .NET dependency): start from a
+**.NET DLL template pre-forged offline** (see `tools/build_template_dll.md`) that
+contains fixed-width placeholder literals; at runtime the **bytes are patched**
+(UTF-16LE of the string heap) with the deployment's real values, without recompiling.
+The result is a valid, decompilable .NET DLL (dnSpy/ILSpy).
 
-Si la plantilla no está presente (p.ej. entorno sin el artefacto), se degrada a un
-binario señuelo con cabecera PE y las credenciales embebidas en claro: un agente que
-lo descargue y haga `strings`/decompile igualmente encuentra el cebo. Nunca rompe.
+If the template is missing (e.g. an environment without the artifact), it degrades to a
+decoy binary with a PE header and the credentials embedded in cleartext: an agent that
+downloads it and runs `strings`/decompile still finds the lure. It never breaks.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("moqesh.forge")
 
-# Plantilla por defecto (si existe). Generable offline con el build de .NET.
+# Default template (if present). Can be generated offline with the .NET build.
 _DEFAULT_TEMPLATE = os.path.join(os.path.dirname(__file__), "assets", "portal_template.dll")
 
-# Literales-placeholder de ancho fijo que debe contener la plantilla (ASCII).
-# El parcheo respeta exactamente su longitud para no desplazar metadata del PE.
+# Fixed-width placeholder literals the template must contain (ASCII).
+# Patching respects their exact length so PE metadata does not shift.
 _PLACEHOLDERS = {
     "connection_string": "MQCONN__" + "0" * 120,  # 128 chars
     "internal_api_base": "MQAPI__" + "0" * 57,  # 64 chars
@@ -48,8 +48,8 @@ def _safe_name(s: str) -> str:
 
 
 def _pad(value: str, width: int, salt: bytes) -> str:
-    """Ajusta `value` a `width` chars: trunca si sobra, o rellena con base62
-    derivado del salt (parece un secreto más largo; el marcador real queda de prefijo)."""
+    """Fit `value` to `width` chars: truncate if too long, or pad with base62
+    derived from the salt (looks like a longer secret; the real marker stays as a prefix)."""
     if len(value) >= width:
         return value[:width]
     need = width - len(value)
@@ -60,7 +60,7 @@ def _pad(value: str, width: int, salt: bytes) -> str:
 
 
 class AssemblyForge:
-    """Forja DLLs señuelo parcheando una plantilla; cachea por clave."""
+    """Forges decoy DLLs by patching a template; caches by key."""
 
     def __init__(self, template_path: str | None = None) -> None:
         self._template_path = template_path or _DEFAULT_TEMPLATE
@@ -81,8 +81,8 @@ class AssemblyForge:
             return self._patch(template, cache_key, inp)
         if not self._warned:
             logger.warning(
-                "Plantilla DLL ausente (%s): se sirve binario señuelo PE con credenciales "
-                "embebidas. Genera la plantilla offline para un DLL .NET decompilable.",
+                "DLL template missing (%s): serving a decoy PE binary with embedded "
+                "credentials. Generate the template offline for a decompilable .NET DLL.",
                 self._template_path,
             )
             self._warned = True
@@ -110,7 +110,7 @@ class AssemblyForge:
             if i >= 0 and len(repl) == len(needle):
                 buf[i : i + len(needle)] = repl
             else:
-                logger.debug("Placeholder '%s' no encontrado en la plantilla; se omite.", field_name)
+                logger.debug("Placeholder '%s' not found in the template; skipping.", field_name)
         return bytes(buf)
 
     @staticmethod
@@ -118,13 +118,13 @@ class AssemblyForge:
         h = hashlib.sha256(cache_key.encode()).digest()
         size = 8192 + h[0] * 32
         buf = bytearray(size)
-        # Cabecera DOS/PE plausible (file(1) la reconoce como ejecutable PE, no ELF).
+        # Plausible DOS/PE header (file(1) recognizes it as a PE executable, not ELF).
         buf[0:2] = b"MZ"
-        buf[0x3C:0x40] = (0x80).to_bytes(4, "little")  # e_lfanew -> offset del PE
+        buf[0x3C:0x40] = (0x80).to_bytes(4, "little")  # e_lfanew -> PE offset
         buf[0x80:0x84] = b"PE\x00\x00"
         for i in range(0x84, size):
             buf[i] = h[i % len(h)]
-        # Credenciales embebidas en claro (recuperables con `strings`/decompilación).
+        # Credentials embedded in cleartext (recoverable with `strings`/decompilation).
         blob = (
             "\x00AppConfig\x00ConnectionString\x00"
             + inp.connection_string

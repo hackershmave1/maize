@@ -1,4 +1,4 @@
-"""Router de honeypots: CRUD, toggle y subida de contenido."""
+"""Honeypots router: CRUD, toggle and content upload."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def list_honeypots(db: Session = Depends(get_session)) -> list[HoneypotDto]:
 def get_honeypot(honeypot_id: int, db: Session = Depends(get_session)) -> HoneypotDto:
     h = db.get(HoneypotConfig, honeypot_id)
     if h is None:
-        raise HTTPException(status_code=404, detail="honeypot no encontrado")
+        raise HTTPException(status_code=404, detail="honeypot not found")
     return _to_dto(db, h)
 
 
@@ -52,7 +52,7 @@ def create_honeypot(body: CreateHoneypotRequest, db: Session = Depends(get_sessi
 def update_honeypot(honeypot_id: int, patch: UpdateHoneypotRequest, db: Session = Depends(get_session)) -> Response:
     h = db.get(HoneypotConfig, honeypot_id)
     if h is None:
-        raise HTTPException(status_code=404, detail="honeypot no encontrado")
+        raise HTTPException(status_code=404, detail="honeypot not found")
     if patch.name is not None:
         h.name = patch.name
     if patch.port is not None:
@@ -79,7 +79,7 @@ def delete_honeypot(honeypot_id: int, db: Session = Depends(get_session)) -> Res
 def toggle_honeypot(honeypot_id: int, db: Session = Depends(get_session)) -> dict:
     h = db.get(HoneypotConfig, honeypot_id)
     if h is None:
-        raise HTTPException(status_code=404, detail="honeypot no encontrado")
+        raise HTTPException(status_code=404, detail="honeypot not found")
     h.is_active = not h.is_active
     db.commit()
     return {"isActive": h.is_active}
@@ -87,8 +87,8 @@ def toggle_honeypot(honeypot_id: int, db: Session = Depends(get_session)) -> dic
 
 @router.post("/{honeypot_id}/upload")
 async def upload_content(honeypot_id: int, files: list[UploadFile]) -> dict:
-    # El contenido procedural del laberinto hace innecesaria la subida manual;
-    # se acepta por compatibilidad con el dashboard y se reporta el conteo.
+    # The labyrinth's procedural content makes manual upload unnecessary;
+    # it is accepted for dashboard compatibility and the count is reported.
     names = [f.filename for f in files]
     for f in files:
         await f.close()

@@ -1,14 +1,14 @@
-"""Autenticación del dashboard (admin único) — sin dependencias nuevas.
+"""Dashboard authentication (single admin), with no new dependencies.
 
-- Contraseñas: PBKDF2-HMAC-SHA256 (stdlib `hashlib`), salt por usuario, comparación
-  en tiempo constante. Formato: ``pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>``.
-- Sesión: cookie firmada con HMAC-SHA256 (stdlib), con expiración embebida y
-  verificada. No hay estado de sesión en servidor (stateless, a prueba de reinicios).
-- El secreto de firma es estable por despliegue: `MOQESH_SESSION_SECRET` o, si está
-  vacío, uno generado y persistido junto a la DB (volumen Docker).
+- Passwords: PBKDF2-HMAC-SHA256 (stdlib `hashlib`), per-user salt, constant-time
+  comparison. Format: ``pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>``.
+- Session: cookie signed with HMAC-SHA256 (stdlib), with an embedded and
+  verified expiry. No server-side session state (stateless, restart-proof).
+- The signing secret is stable per deployment: `MOQESH_SESSION_SECRET` or, if
+  empty, one generated and persisted next to the DB (Docker volume).
 
-Separado del canal de sensores (`security.py`, HMAC simétrico): aquel protege
-sensor↔servidor; este, operador↔dashboard.
+Separate from the sensor channel (`security.py`, symmetric HMAC): that one protects
+sensor<->server; this one, operator<->dashboard.
 """
 
 from __future__ import annotations
@@ -30,11 +30,11 @@ from .models import User, utcnow
 
 logger = logging.getLogger("moqesh.auth")
 
-_PBKDF2_ITERS = 600_000  # recomendación OWASP para PBKDF2-HMAC-SHA256
+_PBKDF2_ITERS = 600_000  # OWASP recommendation for PBKDF2-HMAC-SHA256
 _COOKIE_NAME = "moqesh_session"
 
 
-# ------------------------------- contraseñas --------------------------------
+# ------------------------------- passwords ----------------------------------
 
 
 def hash_password(password: str, *, iters: int = _PBKDF2_ITERS) -> str:
@@ -58,8 +58,8 @@ _dummy_hash: str | None = None
 
 
 def dummy_hash() -> str:
-    """Hash señuelo con las MISMAS iteraciones que uno real. El login lo verifica cuando el
-    usuario no existe, para que el tiempo de respuesta no revele si existe o no."""
+    """Decoy hash with the SAME iterations as a real one. Login verifies it when the
+    user does not exist, so response time does not reveal whether it exists."""
     global _dummy_hash
     if _dummy_hash is None:
         _dummy_hash = hash_password(secrets.token_hex(8))
@@ -99,8 +99,8 @@ def cookie_name() -> str:
 
 
 def bootstrap_admin(session: Session) -> None:
-    """Crea el usuario admin si aún no hay usuarios. La contraseña sale de
-    `MOQESH_ADMIN_PASSWORD`; si está vacía, se genera una y se imprime UNA vez en el log."""
+    """Create the admin user if there are no users yet. The password comes from
+    `MOQESH_ADMIN_PASSWORD`; if empty, one is generated and printed ONCE to the log."""
     if session.scalar(select(User).limit(1)) is not None:
         return
     username = settings.admin_user or "admin"
@@ -113,13 +113,13 @@ def bootstrap_admin(session: Session) -> None:
     session.commit()
     if generated:
         logger.warning(
-            "[auth] Usuario admin '%s' creado con contraseña GENERADA (una sola vez): %s\n"
-            "       Cámbiala o fija MOQESH_ADMIN_PASSWORD y recrea el usuario.",
+            "[auth] Admin user '%s' created with a GENERATED password (shown once): %s\n"
+            "       Change it, or set MOQESH_ADMIN_PASSWORD and recreate the user.",
             username,
             password,
         )
     else:
-        logger.info("[auth] Usuario admin '%s' creado desde MOQESH_ADMIN_PASSWORD.", username)
+        logger.info("[auth] Admin user '%s' created from MOQESH_ADMIN_PASSWORD.", username)
 
 
 def touch_last_login(session: Session, user: User) -> None:
@@ -146,7 +146,7 @@ _cached_secret: bytes | None = None
 
 
 def _secret() -> bytes:
-    """Secreto de firma estable por despliegue (env o fichero persistido junto a la DB)."""
+    """Signing secret stable per deployment (env or a file persisted next to the DB)."""
     global _cached_secret
     if _cached_secret is not None:
         return _cached_secret
@@ -166,7 +166,7 @@ def _secret() -> bytes:
         os.chmod(path, 0o600)
         _cached_secret = generated
     except OSError:
-        # Último recurso: secreto efímero en memoria (las sesiones no sobreviven a un reinicio).
-        logger.warning("[auth] No se pudo persistir el secreto de sesión; se usa uno efímero.")
+        # Last resort: ephemeral in-memory secret (sessions do not survive a restart).
+        logger.warning("[auth] Could not persist the session secret; using an ephemeral one.")
         _cached_secret = secrets.token_hex(32).encode()
     return _cached_secret

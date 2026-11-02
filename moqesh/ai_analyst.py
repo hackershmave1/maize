@@ -1,21 +1,21 @@
-"""Modulo OPCIONAL de confirmacion de agentes IA en la zona gris.
+"""OPTIONAL module for confirming AI agents in the gray zone.
 
-El sistema de deteccion por reglas (`detection.py`) funciona de forma autonoma y
-asigna a cada sesion un score 0..1. Las sesiones con score intermedio (zona gris)
-son ambiguas: aqui las revisamos una vez mas, con un clasificador que puede ser
-puramente heuristico (sin tokens, sin red) o apoyarse en un LLM compatible con la
-API de OpenAI (OpenRouter, endpoint local, etc.). Si el LLM no esta disponible o
-falla, se degrada de forma elegante al heuristico: el modulo NUNCA bloquea el
-pipeline y es seguro ejecutarlo sin configurar ninguna clave.
+The rule-based detection system (`detection.py`) works autonomously and
+assigns each session a 0..1 score. Sessions with an intermediate score (gray zone)
+are ambiguous: here we review them once more, with a classifier that can be
+purely heuristic (no tokens, no network) or backed by an LLM compatible with the
+OpenAI API (OpenRouter, a local endpoint, etc.). If the LLM is unavailable or
+fails, it degrades gracefully to the heuristic: the module NEVER blocks the
+pipeline and is safe to run without configuring any key.
 
-Referencia de comportamiento: `Moqesh.AiAnalyst` (C#).
+Behavioral reference: `Moqesh.AiAnalyst` (C#).
 
-Variables de entorno equivalentes a `AiConfirmationOptions` (ver `from_env`):
+Environment variables equivalent to `AiConfirmationOptions` (see `from_env`):
     MOQESH_AI_ENABLED          -> enabled          ("1"/"true"/"yes" = True)
     MOQESH_AI_PROVIDER         -> provider         ("heuristic" | "openai")
-    MOQESH_AI_BASE_URL         -> base_url         (p.ej. https://openrouter.ai/api/v1)
-    MOQESH_AI_API_KEY          -> api_key          (nunca hardcodear secretos)
-    MOQESH_AI_MODEL            -> model            (p.ej. anthropic/claude-3.5-haiku)
+    MOQESH_AI_BASE_URL         -> base_url         (e.g. https://openrouter.ai/api/v1)
+    MOQESH_AI_API_KEY          -> api_key          (never hardcode secrets)
+    MOQESH_AI_MODEL            -> model            (e.g. anthropic/claude-3.5-haiku)
     MOQESH_AI_GRAY_ZONE_LOW    -> gray_zone_low    (default 0.35)
     MOQESH_AI_GRAY_ZONE_HIGH   -> gray_zone_high   (default 0.65)
     MOQESH_AI_CONFIRM_THRESHOLD-> confirm_threshold(default 0.70)
@@ -38,9 +38,9 @@ from .models import AgentSession, RequestLog
 
 log = logging.getLogger(__name__)
 
-# Timeout de la llamada al LLM; si se agota caemos al heuristico.
+# LLM call timeout; when it expires we fall back to the heuristic.
 _LLM_TIMEOUT_S = 30.0
-# Cuantos requests incluir en el prompt para acotar el consumo de tokens.
+# How many requests to include in the prompt, to bound token usage.
 _MAX_BEATS_IN_PROMPT = 30
 
 
@@ -50,20 +50,20 @@ def _as_bool(value: str) -> bool:
 
 @dataclass(slots=True)
 class AiConfirmationOptions:
-    """Config del modulo de confirmacion. Valores seguros por defecto (heuristico)."""
+    """Confirmation module config. Safe defaults (heuristic)."""
 
     enabled: bool = False
     provider: str = "heuristic"  # "heuristic" | "openai"
     base_url: str = ""
     api_key: str = ""
     model: str = ""
-    gray_zone_low: float = 0.35  # solo se analizan sesiones en [low, high]
+    gray_zone_low: float = 0.35  # only sessions in [low, high] are analyzed
     gray_zone_high: float = 0.65
-    confirm_threshold: float = 0.7  # confianza minima para fijar un veredicto
+    confirm_threshold: float = 0.7  # minimum confidence to set a verdict
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> AiConfirmationOptions:
-        """Construye las opciones desde variables de entorno (ver docstring del modulo)."""
+        """Build the options from environment variables (see the module docstring)."""
         e = env if env is not None else os.environ
         o = cls()
         o.enabled = _as_bool(e.get("MOQESH_AI_ENABLED", ""))
@@ -79,17 +79,17 @@ class AiConfirmationOptions:
 
 @dataclass(slots=True)
 class Verdict:
-    """Juicio del clasificador sobre una sesion."""
+    """The classifier's judgment about a session."""
 
     is_ai: bool
     confidence: float  # 0..1
     reasoning: str
-    model_attribution: str | None = None  # None en heuristico; p.ej. "openai:<model>" con LLM
+    model_attribution: str | None = None  # None for heuristic; e.g. "openai:<model>" with an LLM
 
 
 @runtime_checkable
 class Classifier(Protocol):
-    """Interfaz comun; permite intercambiar heuristico y LLM sin acoplar llamadas."""
+    """Common interface; lets heuristic and LLM be swapped without coupling calls."""
 
     async def classify(self, features: dict) -> Verdict: ...
 
@@ -99,17 +99,17 @@ def _clamp01(x: float) -> float:
 
 
 class HeuristicClassifier:
-    """Clasificador sin LLM: explica el veredicto a partir de senales de timing,
-    profundidad y patron. Funciona sin consumir tokens y sirve de fallback.
+    """LLM-free classifier: explains the verdict from timing,
+    depth and pattern signals. Works without consuming tokens and serves as the fallback.
 
-    `features` esperadas (todas opcionales, con defaults tolerantes):
+    Expected `features` (all optional, with tolerant defaults):
         score (float), request_count (int), max_depth (int),
-        matched_rules (list[str]), intervals (list[float] en segundos).
+        matched_rules (list[str]), intervals (list[float] in seconds).
     """
 
     async def classify(self, features: dict) -> Verdict:
         reasons: list[str] = []
-        conf = float(features.get("score", 0.0))  # ancla en el score de reglas
+        conf = float(features.get("score", 0.0))  # anchored on the rules score
 
         intervals = [x for x in features.get("intervals", []) if x and x > 0]
         if len(intervals) >= 3:
@@ -117,24 +117,24 @@ class HeuristicClassifier:
             std = math.sqrt(sum((x - avg) ** 2 for x in intervals) / len(intervals))
             if avg > 0 and std / avg < 0.35:
                 conf += 0.15
-                reasons.append(f"ritmo muy regular (cv={std / avg:.2f})")
+                reasons.append(f"very regular rhythm (cv={std / avg:.2f})")
 
         max_depth = int(features.get("max_depth", 0))
         if max_depth >= 6:
             conf += 0.15
-            reasons.append(f"descenso a profundidad {max_depth}")
+            reasons.append(f"descent to depth {max_depth}")
 
         request_count = int(features.get("request_count", 0))
         if request_count >= 20:
             conf += 0.1
-            reasons.append(f"{request_count} requests sostenidos")
+            reasons.append(f"{request_count} sustained requests")
 
         matched = features.get("matched_rules", []) or []
         if "exhaustive_fanout" in matched:
             conf += 0.1
-            reasons.append("fan-out exhaustivo")
+            reasons.append("exhaustive fan-out")
         if "no_asset_render" in matched:
-            reasons.append("sin render de assets")
+            reasons.append("no asset rendering")
 
         conf = _clamp01(conf)
         text = "; ".join(reasons) if reasons else "senales debiles"
@@ -142,10 +142,10 @@ class HeuristicClassifier:
 
 
 class LlmClassifier:
-    """Clasificador basado en LLM via API OpenAI-compatible.
+    """LLM-based classifier via an OpenAI-compatible API.
 
-    Envia un resumen compacto de la sesion y pide un veredicto JSON. Ante
-    cualquier error (red, status != 2xx, JSON invalido) cae al heuristico.
+    Sends a compact session summary and asks for a JSON verdict. On
+    any error (network, status != 2xx, invalid JSON) it falls back to the heuristic.
     """
 
     def __init__(self, options: AiConfirmationOptions) -> None:
@@ -155,7 +155,7 @@ class LlmClassifier:
     async def classify(self, features: dict) -> Verdict:
         try:
             return await self._classify_llm(features)
-        except Exception as exc:  # degradacion elegante: nunca propagamos
+        except Exception as exc:  # graceful degradation: we never propagate
             log.warning("[ai_analyst] LLM no disponible (%s); uso heuristico", exc)
             return await self._fallback.classify(features)
 
@@ -169,10 +169,10 @@ class LlmClassifier:
                 {
                     "role": "system",
                     "content": (
-                        "Eres un analista de seguridad. Determinas si una sesion HTTP contra "
-                        "un honeypot fue generada por un agente de IA/bot automatizado o por un "
-                        "humano. Responde SOLO con JSON: "
-                        '{"is_ai_agent":bool,"confidence":0..1,"reasoning":"breve"}.'
+                        "You are a security analyst. You determine whether an HTTP session against "
+                        "a honeypot was generated by an AI agent/automated bot or by a "
+                        "human. Reply ONLY with JSON: "
+                        '{"is_ai_agent":bool,"confidence":0..1,"reasoning":"brief"}.'
                     ),
                 },
                 {"role": "user", "content": self._build_prompt(features)},
@@ -202,27 +202,27 @@ class LlmClassifier:
     @staticmethod
     def _build_prompt(features: dict) -> str:
         lines = [
-            f"UA: {features.get('user_agent') or '(ninguno)'}",
-            "requests={rc} profundidad_max={md} score_reglas={sc:.2f} reglas={rules}".format(
+            f"UA: {features.get('user_agent') or '(none)'}",
+            "requests={rc} max_depth={md} rules_score={sc:.2f} rules={rules}".format(
                 rc=features.get("request_count", 0),
                 md=features.get("max_depth", 0),
                 sc=float(features.get("score", 0.0)),
                 rules=",".join(features.get("matched_rules", []) or []),
             ),
-            f"tokens_estimados={features.get('tokens_estimated', 0)}",
+            f"tokens_estimated={features.get('tokens_estimated', 0)}",
             "paths (muestra):",
         ]
         paths = features.get("paths", []) or []
         intervals = features.get("intervals", []) or []
         for i, path in enumerate(paths[:_MAX_BEATS_IN_PROMPT]):
-            # intervals[i] es el gap previo a paths[i]; el primero no tiene antecesor.
+            # intervals[i] is the gap before paths[i]; the first has no predecessor.
             iv = intervals[i - 1] if 0 < i <= len(intervals) else 0.0
             lines.append(f"  {path} | {iv:.1f}s")
         return "\n".join(lines)
 
 
 def _extract_json(content: str) -> dict:
-    """Extrae el primer objeto JSON del texto del LLM (tolera ```json ... ``` y prosa)."""
+    """Extract the first JSON object from the LLM text (tolerates ```json ... ``` and prose)."""
     i, j = content.find("{"), content.rfind("}")
     if i < 0 or j <= i:
         return {}
@@ -233,10 +233,10 @@ def _extract_json(content: str) -> dict:
 
 
 def build_classifier(options: AiConfirmationOptions) -> Classifier:
-    """Fabrica el clasificador segun provider/enabled.
+    """Build the classifier based on provider/enabled.
 
-    Devuelve el heuristico salvo que el modulo este habilitado con provider
-    "openai" y credenciales (base_url + api_key) presentes.
+    Returns the heuristic unless the module is enabled with provider
+    "openai" and credentials (base_url + api_key) are present.
     """
     if options.enabled and options.provider.lower() == "openai" and options.base_url and options.api_key:
         return LlmClassifier(options)
@@ -250,7 +250,7 @@ def _parse_rules(matched_rules: str | None) -> list[str]:
 
 
 def _build_features(db: Session, session: AgentSession) -> dict:
-    """Arma el dict de features a partir de la sesion y sus request logs."""
+    """Build the features dict from the session and its request logs."""
     rows = db.execute(
         select(RequestLog.timestamp, RequestLog.path)
         .where(RequestLog.session_id == session.id)
@@ -278,20 +278,20 @@ async def confirm_session(
     classifier: Classifier,
     options: AiConfirmationOptions,
 ) -> None:
-    """Confirma una sesion en zona gris y escribe el veredicto en `session`.
+    """Confirm a gray-zone session and write the verdict into `session`.
 
-    Si el score NO cae en [gray_zone_low, gray_zone_high] no hace nada (la sesion
-    ya es suficientemente clara para el motor de reglas). En caso contrario pide
-    un veredicto al clasificador y actualiza `verdict`, `verdict_confidence`,
-    `verdict_reasoning` y `model_attribution`; luego hace commit via `db`.
+    If the score does NOT fall in [gray_zone_low, gray_zone_high] it does nothing (the session
+    is already clear enough for the rules engine). Otherwise it asks the
+    classifier for a verdict and updates `verdict`, `verdict_confidence`,
+    `verdict_reasoning` and `model_attribution`; then commits via `db`.
 
-    Veredicto (igual que el C#): solo se fija cuando la confianza alcanza el
-    umbral; con baja confianza la sesion queda en "Unknown" para reintentar con
-    mas datos.
+    Verdict (same as the C# version): only set when confidence reaches the
+    threshold; with low confidence the session stays "Unknown" to retry with
+    more data.
     """
     score = session.ai_probability_score
     if not (options.gray_zone_low <= score <= options.gray_zone_high):
-        return  # fuera de la zona gris: no se consume clasificador
+        return  # outside the gray zone: the classifier is not consumed
 
     features = _build_features(db, session)
     verdict = await classifier.classify(features)

@@ -1,18 +1,18 @@
-"""World: contenido estático INERTE servido por el honeypot (multi-sitio).
+"""World: INERT static content served by the honeypot (multi-site).
 
-Sustituye al laberinto generado como fuente primaria de contenido. Un "World" es un
-árbol de ficheros reales en disco (volumen de datos) + un `manifest.json` que monta
-uno o varios **portales** bajo distintos prefijos de ruta (como un servidor que aloja
-varias webs/vhosts). El honeypot SOLO sirve bytes: nunca ejecuta nada (sin intérprete,
-sin backend, sin auth real) — así se añade realismo sin introducir superficie de ataque.
+Replaces the generated labyrinth as the primary content source. A "World" is a
+tree of real files on disk (a data volume) + a `manifest.json` that mounts
+one or more **portals** under different path prefixes (like a server hosting
+several sites/vhosts). The honeypot ONLY serves bytes: it never executes anything (no interpreter,
+no backend, no real auth), so it adds realism without introducing attack surface.
 
-Estructura en disco (`MOQESH_WORLD_PATH`, p.ej. /app/data/world):
+On-disk structure (`MOQESH_WORLD_PATH`, e.g. /app/data/world):
     world/
       manifest.json            # {"mounts": [{"prefix": "/docs", "dir": "sites/docs", "spa": false}, ...]}
-      sites/<portal>/index.html, assets/..., api/*.json   # estáticos + mock data
+      sites/<portal>/index.html, assets/..., api/*.json   # static files + mock data
 
-Seguridad: la resolución de rutas está acotada a cada directorio de portal (sin escape
-por `..`), y resolver una ruta nunca lee fuera del World.
+Security: path resolution is confined to each portal directory (no escape
+via `..`), and resolving a path never reads outside the World.
 """
 
 from __future__ import annotations
@@ -31,16 +31,16 @@ from pathlib import Path
 
 logger = logging.getLogger("moqesh.world")
 
-# Ficheros estáticos por encima de este umbral se sirven en STREAMING (FileResponse) en vez de
-# leerse enteros en memoria: permite servir árboles voluminosos (p.ej. generados con genbig) sin
-# agotar la RAM del honeypot. Los pequeños (y los dinámicos con tokens) siguen yendo en memoria.
+# Static files above this threshold are STREAMED (FileResponse) instead of being
+# read whole into memory: this lets us serve voluminous trees (e.g. generated with genbig) without
+# exhausting the honeypot's RAM. Small ones (and dynamic ones with tokens) still go in memory.
 STREAM_THRESHOLD = 1 << 20  # 1 MiB
 
-# Capa fina de valores dinámicos que calcula MOQESH (no los portales): evita el delator de
-# endpoints de salud/estado "congelados". Un fichero del World puede incluir estos tokens y
-# Moqesh los sustituye al servir. No ejecuta código de los portales; solo rellena unos valores.
+# A thin layer of dynamic values computed by MOQESH (not the portals): avoids the giveaway of
+# "frozen" health/status endpoints. A World file may include these tokens and
+# Moqesh substitutes them when serving. It runs no portal code; it only fills in a few values.
 _DYN_RE = re.compile(r"\{\{moqesh\.(now_iso|uptime_seconds|minutes_ago)\}\}")
-_DEPLOY_BASE = 1_748_000_000  # ~2025-05; uptime = ahora - base (crece en cada petición)
+_DEPLOY_BASE = 1_748_000_000  # ~2025-05; uptime = now - base (grows on every request)
 
 
 def _dyn_value(key: str) -> str:
@@ -53,10 +53,10 @@ def _dyn_value(key: str) -> str:
         return str(now // 60 % 7 + 1)
     return ""
 
-# Directorio de la semilla curada empaquetada (plantillas de portal inertes).
+# Directory of the packaged curated seed (inert portal templates).
 SEED_DIR = Path(__file__).parent / "worlds" / "seed"
 
-# Tipos de contenido explícitos (el resto cae a mimetypes). Texto lleva charset.
+# Explicit content types (everything else falls back to mimetypes). Text carries a charset.
 _CT_TEXT = {
     ".html": "text/html",
     ".htm": "text/html",
@@ -84,7 +84,7 @@ def content_type_for(path: str) -> str:
 
 
 def default_world_path(db_path: str) -> str:
-    """World junto a la DB (mismo volumen persistente)."""
+    """World next to the DB (same persistent volume)."""
     return os.path.join(os.path.dirname(os.path.abspath(db_path)) or ".", "world")
 
 
@@ -92,22 +92,22 @@ def default_world_path(db_path: str) -> str:
 class WorldFile:
     body: bytes
     content_type: str
-    dynamic: bool = False  # True si Moqesh rellenó tokens dinámicos (sirve sin ETag/Last-Modified)
-    path: str | None = None  # ruta en disco del fichero (presente cuando stream=True)
-    size: int = 0  # tamaño en bytes (para streaming)
-    stream: bool = False  # True = servir en streaming desde `path` (fichero grande), no desde `body`
+    dynamic: bool = False  # True if Moqesh filled in dynamic tokens (served without ETag/Last-Modified)
+    path: str | None = None  # on-disk path of the file (present when stream=True)
+    size: int = 0  # size in bytes (for streaming)
+    stream: bool = False  # True = stream from `path` (large file), not from `body`
 
 
 @dataclass(frozen=True)
 class _Mount:
-    prefix: str  # sin barra final, "/" para la raíz
-    dir: str  # ruta absoluta del portal
-    spa: bool  # si True, rutas no encontradas bajo el mount sirven index.html (app SPA)
-    autoindex: bool = False  # si True, un directorio sin index.html sirve un listado (estilo servidor)
+    prefix: str  # no trailing slash, "/" for the root
+    dir: str  # absolute path of the portal
+    spa: bool  # if True, paths not found under the mount serve index.html (SPA app)
+    autoindex: bool = False  # if True, a directory without index.html serves a listing (server style)
 
 
 class World:
-    """Carga un manifest y resuelve rutas a ficheros estáticos (solo lectura)."""
+    """Load a manifest and resolve paths to static files (read-only)."""
 
     def __init__(self, root: str) -> None:
         self.root = os.path.abspath(root)
@@ -122,7 +122,7 @@ class World:
         try:
             data = json.loads(Path(manifest).read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            logger.warning("[world] manifest.json ilegible en %s", self.root)
+            logger.warning("[world] unreadable manifest.json at %s", self.root)
             return
         mounts: list[_Mount] = []
         for m in data.get("mounts", []):
@@ -130,7 +130,7 @@ class World:
                 continue
             prefix = "/" + str(m.get("prefix", "/")).strip("/")
             d = os.path.abspath(os.path.join(self.root, str(m.get("dir", ""))))
-            # El dir del portal debe quedar DENTRO del World (anti-escape).
+            # The portal dir must stay INSIDE the World (anti-escape).
             if d != self.root and not d.startswith(self.root + os.sep):
                 continue
             if not os.path.isdir(d):
@@ -143,16 +143,16 @@ class World:
                     autoindex=bool(m.get("autoindex")),
                 )
             )
-        # Más específico primero (longest-prefix match).
+        # Most specific first (longest-prefix match).
         mounts.sort(key=lambda mt: len(mt.prefix), reverse=True)
         self.mounts = mounts
         self.active = bool(mounts)
 
     def resolve(self, path: str) -> WorldFile | None:
-        """Devuelve el fichero a servir, o None si no hay nada (el llamador hace 404).
+        """Return the file to serve, or None if there is nothing (the caller returns 404).
 
-        El PRIMER mount que casa la ruta "posee" ese espacio: si no encuentra el fichero
-        dentro, es 404 (no cae a otro mount), como un vhost/app real.
+        The FIRST mount that matches the path "owns" that space: if the file is not found
+        inside, it is a 404 (it does not fall through to another mount), like a real vhost/app.
         """
         if not self.active:
             return None
@@ -169,7 +169,7 @@ class World:
 
     def _serve_within(self, mt: _Mount, rel: str) -> WorldFile | None:
         target = os.path.abspath(os.path.join(mt.dir, rel))
-        # Anti-traversal: el objetivo debe quedar dentro del directorio del portal.
+        # Anti-traversal: the target must stay inside the portal directory.
         if target != mt.dir and not target.startswith(mt.dir + os.sep):
             return None
         if os.path.isdir(target):
@@ -184,18 +184,18 @@ class World:
                 size = os.path.getsize(target)
             except OSError:
                 return None
-            # Fichero grande -> streaming (no se lee en memoria; sin substitución de tokens).
+            # Large file -> streaming (not read into memory; no token substitution).
             if size > STREAM_THRESHOLD:
                 return WorldFile(body=b"", content_type=content_type_for(target), path=target, size=size, stream=True)
             return self._read(target)
         return self._spa_fallback(mt)
 
     def _autoindex(self, mt: _Mount, target: str, rel: str) -> WorldFile | None:
-        """Genera un listado de directorio (estilo autoindex de nginx) para un dir sin index.html.
+        """Generate a directory listing (nginx autoindex style) for a dir without index.html.
 
-        Solo lista los hijos directos de `target` (ya validado dentro del mount); los enlaces son
-        rutas absolutas del propio sitio. Es el señuelo de 'directorio abierto' que invita a un
-        agente a descargar un árbol voluminoso de ficheros reales (quema de tokens finita)."""
+        Only lists the direct children of `target` (already validated inside the mount); the links are
+        absolute paths of the site itself. It is the 'open directory' decoy that invites an
+        agent to download a voluminous tree of real files (finite token burn)."""
         prefix = "" if mt.prefix == "/" else mt.prefix
         url = (prefix + "/" + rel) if rel else (prefix + "/")
         if not url.startswith("/"):
@@ -247,7 +247,7 @@ class World:
         except OSError:
             return None
         ct = content_type_for(abs_path)
-        # Sustitución de tokens dinámicos (solo si el fichero los declara).
+        # Dynamic token substitution (only if the file declares them).
         if b"{{moqesh." in body:
             try:
                 text = body.decode("utf-8")
@@ -260,10 +260,10 @@ class World:
 
 
 def ensure_seeded(world_path: str) -> bool:
-    """Si el World está vacío (sin manifest) y existe la semilla empaquetada, la copia.
+    """If the World is empty (no manifest) and the packaged seed exists, copy it.
 
-    Idempotente: no toca un World ya provisionado (p.ej. por el agente). Devuelve True
-    si tras la llamada hay un World con manifest."""
+    Idempotent: does not touch an already provisioned World (e.g. by the agent). Returns True
+    if after the call there is a World with a manifest."""
     manifest = os.path.join(world_path, "manifest.json")
     if os.path.isfile(manifest):
         return True
@@ -281,5 +281,5 @@ def ensure_seeded(world_path: str) -> bool:
         logger.info("[world] semilla copiada a %s", world_path)
         return True
     except OSError:
-        logger.warning("[world] no se pudo sembrar el World en %s", world_path, exc_info=True)
+        logger.warning("[world] could not seed the World at %s", world_path, exc_info=True)
         return False

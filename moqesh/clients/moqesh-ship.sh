@@ -1,37 +1,37 @@
 #!/bin/sh
-# moqesh-ship.sh - Shipper agentless de Moqesh (POSIX sh).
+# moqesh-ship.sh - Moqesh agentless shipper (POSIX sh).
 #
-# Corre por cron en el servidor del cliente. Lee el access log del web server,
-# se queda SOLO con las lineas que casan el prefijo del cebo (privacidad: el
-# trafico real de usuarios nunca sale del host), y las envia firmadas con HMAC
-# al servidor Moqesh. No instala nada: solo necesita sh, curl, openssl y awk.
+# Runs from cron on the customer's server. Reads the web server's access log,
+# keeps ONLY the lines that match the lure prefix (privacy: real user
+# traffic never leaves the host), and sends them HMAC-signed
+# to the Moqesh server. Installs nothing: it only needs sh, curl, openssl and awk.
 #
-# Idempotente: guarda un byte-offset del log; el servidor ademas deduplica.
-# NUNCA modifica ni borra el log de origen.
+# Idempotent: stores a byte offset into the log; the server also deduplicates.
+# NEVER modifies or deletes the source log.
 #
-# Variables de entorno (ver moqesh/clients/README.md):
-#   MOQESH_SERVER     URL base del servidor Moqesh         (requerida)
-#   MOQESH_KEY_ID     identificador de clave del sensor    (requerida)
-#   MOQESH_SECRET     secreto HMAC del sensor              (requerida)
-#   MOQESH_LOG        ruta del access log                  (requerida)
-#   MOQESH_BASE_PATH  prefijo del cebo, p.ej. /lure         (requerida)
-#   MOQESH_FORMAT     nginx|apache|caddy|json|raw          (def. nginx)
-#   MOQESH_STATE      fichero de offset                    (def. junto al script)
-#   MOQESH_DRY_RUN    1 = imprime lo que enviaria y sale   (def. vacio)
+# Environment variables (see moqesh/clients/README.md):
+#   MOQESH_SERVER     base URL of the Moqesh server          (required)
+#   MOQESH_KEY_ID     the sensor's key identifier            (required)
+#   MOQESH_SECRET     the sensor's HMAC secret               (required)
+#   MOQESH_LOG        path to the access log                 (required)
+#   MOQESH_BASE_PATH  lure prefix, e.g. /lure                (required)
+#   MOQESH_FORMAT     nginx|apache|caddy|json|raw            (default nginx)
+#   MOQESH_STATE      offset file                            (default: next to the script)
+#   MOQESH_DRY_RUN    1 = print what would be sent and exit  (default empty)
 #
-# Decision documentada: si /control devuelve enabled=false, NO se envia y NO se
-# avanza el offset, para no perder lineas del cebo al reactivar el sensor.
+# Documented decision: if /control returns enabled=false, nothing is sent and the
+# offset is NOT advanced, so lure lines are not lost when the sensor is re-enabled.
 
 LC_ALL=C
 export LC_ALL
 
-CAP=20000  # tope de lineas por envio (el servidor tambien capa a 20000)
+CAP=20000  # cap on lines per send (the server also caps at 20000)
 
 die() { printf 'moqesh-ship: %s\n' "$*" >&2; exit 1; }
 info() { printf 'moqesh-ship: %s\n' "$*" >&2; }
 
 # ---------------------------------------------------------------------------
-# 1. Entorno y validacion
+# 1. Environment and validation
 # ---------------------------------------------------------------------------
 MOQESH_SERVER=${MOQESH_SERVER:-}
 MOQESH_KEY_ID=${MOQESH_KEY_ID:-}
@@ -41,23 +41,23 @@ MOQESH_BASE_PATH=${MOQESH_BASE_PATH:-}
 MOQESH_FORMAT=${MOQESH_FORMAT:-nginx}
 MOQESH_DRY_RUN=${MOQESH_DRY_RUN:-}
 
-[ -n "$MOQESH_SERVER" ]    || die "falta MOQESH_SERVER"
-[ -n "$MOQESH_KEY_ID" ]    || die "falta MOQESH_KEY_ID"
-[ -n "$MOQESH_SECRET" ]    || die "falta MOQESH_SECRET"
-[ -n "$MOQESH_LOG" ]       || die "falta MOQESH_LOG"
-# Prefijo vacio = se enviaria TODO el trafico -> prohibido por privacidad.
-[ -n "$MOQESH_BASE_PATH" ] || die "falta MOQESH_BASE_PATH (sin prefijo se enviaria trafico real)"
+[ -n "$MOQESH_SERVER" ]    || die "MOQESH_SERVER is missing"
+[ -n "$MOQESH_KEY_ID" ]    || die "MOQESH_KEY_ID is missing"
+[ -n "$MOQESH_SECRET" ]    || die "MOQESH_SECRET is missing"
+[ -n "$MOQESH_LOG" ]       || die "MOQESH_LOG is missing"
+# Empty prefix = ALL traffic would be sent -> forbidden for privacy.
+[ -n "$MOQESH_BASE_PATH" ] || die "MOQESH_BASE_PATH is missing (without a prefix, real traffic would be sent)"
 
-MOQESH_SERVER=${MOQESH_SERVER%/}  # sin barra final -> evita //control
+MOQESH_SERVER=${MOQESH_SERVER%/}  # no trailing slash -> avoids //control
 
-command -v curl    >/dev/null 2>&1 || die "curl no esta disponible"
-command -v openssl >/dev/null 2>&1 || die "openssl no esta disponible"
-command -v awk     >/dev/null 2>&1 || die "awk no esta disponible"
+command -v curl    >/dev/null 2>&1 || die "curl is not available"
+command -v openssl >/dev/null 2>&1 || die "openssl is not available"
+command -v awk     >/dev/null 2>&1 || die "awk is not available"
 
-# Directorio del propio script (para el estado por defecto).
+# The script's own directory (for the default state).
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) || SELF_DIR=.
 
-# Estado por defecto: unico por ruta de log (varios logs -> varios offsets).
+# Default state: unique per log path (several logs -> several offsets).
 if [ -n "${MOQESH_STATE:-}" ]; then
   STATE=$MOQESH_STATE
 else
@@ -67,10 +67,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Helpers de firma
+# Signing helpers
 # ---------------------------------------------------------------------------
 
-# Timestamp unix con decimales (fallback a enteros si date no soporta %N).
+# Unix timestamp with decimals (falls back to integers if date does not support %N).
 mq_ts() {
   _t=$(date +%s.%N 2>/dev/null)
   case "$_t" in
@@ -79,44 +79,44 @@ mq_ts() {
   printf '%s' "$_t"
 }
 
-# sign_file TS FILE -> "sha256=<hex>" sobre  TS + "." + <bytes de FILE>
+# sign_file TS FILE -> "sha256=<hex>" over  TS + "." + <bytes of FILE>
 # (identico a moqesh.security.sign: HMAC_SHA256(secret, ts.encode()+b"."+body)).
 sign_file() {
   _ts=$1; _f=$2
   _hex=$({ printf '%s.' "$_ts"; cat "$_f"; } \
     | openssl dgst -sha256 -hmac "$MOQESH_SECRET" 2>/dev/null \
     | awk '{print $NF}')
-  [ -n "$_hex" ] || die "openssl fallo al calcular HMAC"
+  [ -n "$_hex" ] || die "openssl failed to compute the HMAC"
   printf 'sha256=%s' "$_hex"
 }
 
-# Escapa un escalar corto (format / base_path) para JSON.
+# Escape a short scalar (format / base_path) for JSON.
 json_scalar() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 # ---------------------------------------------------------------------------
-# Temporales
+# Temporary files
 # ---------------------------------------------------------------------------
-TMPD=$(mktemp -d 2>/dev/null) || die "no se pudo crear directorio temporal"
+TMPD=$(mktemp -d 2>/dev/null) || die "could not create a temporary directory"
 trap 'rm -rf "$TMPD"' EXIT INT TERM HUP
 
-RAW="$TMPD/raw"            # bytes nuevos del log
-ESC="$TMPD/esc"            # lineas del cebo ya escapadas (una por linea)
-CNTF="$TMPD/cnt"           # numero de lineas del cebo
-HDR="$TMPD/hdr"            # cabeceras de /control
-CBODY="$TMPD/cbody"        # cuerpo de /control
-EMPTY="$TMPD/empty"        # cuerpo vacio (firma del GET)
+RAW="$TMPD/raw"            # new bytes from the log
+ESC="$TMPD/esc"            # lure lines, already escaped (one per line)
+CNTF="$TMPD/cnt"           # number of lure lines
+HDR="$TMPD/hdr"            # /control headers
+CBODY="$TMPD/cbody"        # /control body
+EMPTY="$TMPD/empty"        # empty body (signature of the GET)
 : > "$EMPTY"
 
 # ---------------------------------------------------------------------------
-# 2. Offset + rotacion
+# 2. Offset + rotation
 # ---------------------------------------------------------------------------
-[ -e "$MOQESH_LOG" ] || die "el log no existe: $MOQESH_LOG"
-[ -r "$MOQESH_LOG" ] || die "sin permiso de lectura sobre: $MOQESH_LOG"
+[ -e "$MOQESH_LOG" ] || die "the log does not exist: $MOQESH_LOG"
+[ -r "$MOQESH_LOG" ] || die "no read permission on: $MOQESH_LOG"
 
 cur_size=$(wc -c < "$MOQESH_LOG" 2>/dev/null | tr -d ' ')
-case "$cur_size" in ''|*[!0-9]*) die "no se pudo medir el tamano de $MOQESH_LOG" ;; esac
+case "$cur_size" in ''|*[!0-9]*) die "could not measure the size of $MOQESH_LOG" ;; esac
 
 offset=0
 if [ -f "$STATE" ]; then
@@ -124,22 +124,22 @@ if [ -f "$STATE" ]; then
   case "$offset" in ''|*[!0-9]*) offset=0 ;; esac
 fi
 
-# Rotacion / truncado: el log encogio -> empezar desde cero.
+# Rotation / truncation: the log shrank -> start from zero.
 if [ "$cur_size" -lt "$offset" ]; then
-  info "rotacion detectada ($cur_size < $offset); reiniciando offset a 0"
+  info "rotation detected ($cur_size < $offset); resetting offset to 0"
   offset=0
 fi
 
 if [ "$cur_size" -eq "$offset" ]; then
-  info "sin lineas nuevas (offset $offset)"
+  info "no new lines (offset $offset)"
   exit 0
 fi
 
-# Lee solo lo nuevo desde el offset (tail -c +N es 1-based).
+# Read only what is new since the offset (tail -c +N is 1-based).
 tail -c "+$((offset + 1))" "$MOQESH_LOG" > "$RAW" 2>/dev/null \
-  || die "no se pudo leer $MOQESH_LOG desde el offset (permisos?)"
+  || die "could not read $MOQESH_LOG from the offset (permissions?)"
 
-# ¿Termina en salto de linea? La ultima linea puede estar a medio escribir.
+# Does it end in a newline? The last line may be half-written.
 NL='
 '
 ends_nl=0
@@ -149,11 +149,11 @@ if [ -s "$RAW" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Filtrado por prefijo + escape JSON + conteo de bytes consumidos
+# 3. Prefix filtering + JSON escaping + count of consumed bytes
 #
-# consumed = bytes de TODAS las lineas completas (casen o no el prefijo), para
-# avanzar el offset sin reprocesar trafico real. Solo las lineas que CONTIENEN
-# el prefijo se acumulan para enviar. La ultima linea sin '\n' se deja pendiente.
+# consumed = bytes of ALL complete lines (whether or not they match the prefix), to
+# advance the offset without reprocessing real traffic. Only the lines that CONTAIN
+# the prefix are accumulated for sending. The last line without '\n' is left pending.
 # ---------------------------------------------------------------------------
 : > "$ESC"
 consumed=$(awk \
@@ -177,21 +177,21 @@ function esc(s,   out, i, c, b, n) {
   return out "\"";
 }
 function flush(line) {
-  consumed += length(line) + 1;           # +1 por el \n que la terminaba
-  if (index(line, base) > 0) {            # solo lineas del cebo
+  consumed += length(line) + 1;           # +1 for the \n that ended it
+  if (index(line, base) > 0) {            # lure lines only
     print esc(line) > linesfile;
     cnt++;
   }
 }
 BEGIN { for (i = 0; i < 256; i++) ordv[sprintf("%c", i)] = i; consumed = 0; cnt = 0; }
-NR > 1 { flush(prev) }                     # prev siempre esta completa
+NR > 1 { flush(prev) }                     # prev is always complete
 { prev = $0 }
 END {
-  if (ends_nl == 1 && NR >= 1) flush(prev);  # ultima linea completa
+  if (ends_nl == 1 && NR >= 1) flush(prev);  # last complete line
   print cnt + 0 > countfile;
   print consumed + 0;                        # -> stdout
 }
-' "$RAW") || die "fallo procesando el log"
+' "$RAW") || die "failed to process the log"
 
 case "$consumed" in ''|*[!0-9]*) consumed=0 ;; esac
 cnt=0
@@ -200,7 +200,7 @@ case "$cnt" in ''|*[!0-9]*) cnt=0 ;; esac
 newoffset=$((offset + consumed))
 
 # ---------------------------------------------------------------------------
-# write_offset: escritura atomica del estado.
+# write_offset: atomic write of the state.
 # ---------------------------------------------------------------------------
 write_offset() {
   _o=$1
@@ -209,34 +209,34 @@ write_offset() {
   elif printf '%s\n' "$_o" > "$STATE.tmp" 2>/dev/null; then
     :
   else
-    die "no se pudo escribir el estado en $STATE (permisos del directorio?)"
+    die "could not write the state to $STATE (directory permissions?)"
   fi
-  mv -f "$STATE.tmp" "$STATE" 2>/dev/null || die "no se pudo actualizar $STATE"
+  mv -f "$STATE.tmp" "$STATE" 2>/dev/null || die "could not update $STATE"
 }
 
-# Sin lineas del cebo en lo nuevo: avanza el offset (era trafico real) y termina.
+# No lure lines in the new data: advance the offset (it was real traffic) and exit.
 if [ "$cnt" -eq 0 ]; then
   if [ "$MOQESH_DRY_RUN" = "1" ]; then
-    info "[dry-run] $consumed bytes nuevos, 0 lineas del cebo; nada que enviar (offset $offset -> $newoffset)"
+    info "[dry-run] $consumed new bytes, 0 lure lines; nothing to send (offset $offset -> $newoffset)"
     exit 0
   fi
   write_offset "$newoffset"
-  info "0 lineas del cebo; offset $offset -> $newoffset"
+  info "0 lure lines; offset $offset -> $newoffset"
   exit 0
 fi
 
 fmt_esc=$(json_scalar "$MOQESH_FORMAT")
 base_esc=$(json_scalar "$MOQESH_BASE_PATH")
 
-# Divide en lotes de hasta CAP lineas.
+# Split into batches of up to CAP lines.
 CHUNKD="$TMPD/chunks"
 mkdir -p "$CHUNKD"
 if ! split -l "$CAP" "$ESC" "$CHUNKD/c." 2>/dev/null; then
-  cp "$ESC" "$CHUNKD/c.aa"  # fallback: un solo lote
+  cp "$ESC" "$CHUNKD/c.aa"  # fallback: a single batch
 fi
 
 # ---------------------------------------------------------------------------
-# build_body CHUNK BODYFILE : arma el JSON exacto a firmar/enviar.
+# build_body CHUNK BODYFILE : builds the exact JSON to sign/send.
 # ---------------------------------------------------------------------------
 build_body() {
   _chunk=$1; _bf=$2
@@ -248,12 +248,12 @@ build_body() {
 }
 
 # ---------------------------------------------------------------------------
-# 6. DRY-RUN: imprime lo que enviaria y sale (sin red, sin avanzar offset).
+# 6. DRY-RUN: print what would be sent and exit (no network, no offset advance).
 # ---------------------------------------------------------------------------
 if [ "$MOQESH_DRY_RUN" = "1" ]; then
-  info "[dry-run] servidor=$MOQESH_SERVER formato=$MOQESH_FORMAT prefijo=$MOQESH_BASE_PATH"
-  info "[dry-run] offset $offset -> $newoffset ; $cnt lineas del cebo (NO se avanza el offset)"
-  info "[dry-run] se omite /control; a continuacion los cuerpos que se enviarian:"
+  info "[dry-run] server=$MOQESH_SERVER format=$MOQESH_FORMAT prefix=$MOQESH_BASE_PATH"
+  info "[dry-run] offset $offset -> $newoffset ; $cnt lure lines (the offset is NOT advanced)"
+  info "[dry-run] skipping /control; below are the bodies that would be sent:"
   _i=0
   for _chunk in "$CHUNKD"/c.*; do
     [ -f "$_chunk" ] || continue
@@ -262,7 +262,7 @@ if [ "$MOQESH_DRY_RUN" = "1" ]; then
     build_body "$_chunk" "$_bf"
     _ts=$(mq_ts)
     _sig=$(sign_file "$_ts" "$_bf")
-    printf -- '--- lote %s -> POST %s/ingest/logs ---\n' "$_i" "$MOQESH_SERVER"
+    printf -- '--- batch %s -> POST %s/ingest/logs ---\n' "$_i" "$MOQESH_SERVER"
     printf 'X-Moqesh-Key-Id: %s\n' "$MOQESH_KEY_ID"
     printf 'X-Moqesh-Timestamp: %s\n' "$_ts"
     printf 'X-Moqesh-Signature: %s\n' "$_sig"
@@ -273,7 +273,7 @@ if [ "$MOQESH_DRY_RUN" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4. GET /control (firmado) + verificacion de la firma del servidor.
+# 4. GET /control (signed) + verification of the server's signature.
 # ---------------------------------------------------------------------------
 ts=$(mq_ts)
 sig=$(sign_file "$ts" "$EMPTY")  # cuerpo vacio
@@ -282,25 +282,25 @@ code=$(curl -sS -o "$CBODY" -D "$HDR" -w '%{http_code}' \
   -H "X-Moqesh-Timestamp: $ts" \
   -H "X-Moqesh-Signature: $sig" \
   "$MOQESH_SERVER/control" 2>/dev/null) \
-  || die "no se pudo conectar a $MOQESH_SERVER/control"
-[ "$code" = "200" ] || die "/control devolvio HTTP $code"
+  || die "could not connect to $MOQESH_SERVER/control"
+[ "$code" = "200" ] || die "/control returned HTTP $code"
 
 srv_ts=$(awk -F': *' 'tolower($1)=="x-moqesh-timestamp"{v=$2} END{printf "%s", v}' "$HDR" | tr -d '\r\n')
 srv_sig=$(awk -F': *' 'tolower($1)=="x-moqesh-server-signature"{v=$2} END{printf "%s", v}' "$HDR" | tr -d '\r\n')
-[ -n "$srv_sig" ] || die "/control sin X-Moqesh-Server-Signature"
+[ -n "$srv_sig" ] || die "/control without X-Moqesh-Server-Signature"
 
 calc=$(sign_file "$srv_ts" "$CBODY")
-[ "$calc" = "$srv_sig" ] || die "firma del servidor INVALIDA (posible MITM); no se envia"
+[ "$calc" = "$srv_sig" ] || die "INVALID server signature (possible MITM); not sending"
 
 enabled=$(sed -n 's/.*"enabled"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$CBODY" | head -n1)
 if [ "$enabled" != "true" ]; then
-  # DECISION: disabled -> no enviar y NO avanzar offset (no perder lineas del cebo).
-  info "sensor deshabilitado (enabled=$enabled); no se envia ni se avanza el offset ($cnt lineas en espera)"
+  # DECISION: disabled -> do not send and do NOT advance the offset (do not lose lure lines).
+  info "sensor disabled (enabled=$enabled); not sending or advancing the offset ($cnt lines waiting)"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# 5. POST /ingest/logs por lotes (firmado). Offset solo tras exito total.
+# 5. POST /ingest/logs in batches (signed). Offset only after full success.
 # ---------------------------------------------------------------------------
 sent=0
 _i=0
@@ -319,14 +319,14 @@ for _chunk in "$CHUNKD"/c.*; do
     -H "X-Moqesh-Signature: $_sig" \
     --data-binary @"$_bf" \
     "$MOQESH_SERVER/ingest/logs" 2>/dev/null) \
-    || die "fallo de red enviando el lote $_i (offset sin avanzar)"
+    || die "network failure sending batch $_i (offset not advanced)"
   case "$code" in
     2*) sent=$((sent + 1)) ;;
-    *)  die "ingest devolvio HTTP $code en el lote $_i (offset sin avanzar)" ;;
+    *)  die "ingest returned HTTP $code in batch $_i (offset not advanced)" ;;
   esac
 done
 
-# Todos los lotes OK -> ahora si avanzamos el offset.
+# All batches OK -> now we advance the offset.
 write_offset "$newoffset"
-info "enviados $cnt lineas del cebo en $sent lote(s); offset $offset -> $newoffset"
+info "sent $cnt lure lines in $sent batch(es); offset $offset -> $newoffset"
 exit 0

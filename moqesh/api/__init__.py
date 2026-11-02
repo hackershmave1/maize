@@ -1,7 +1,7 @@
-"""App del dashboard (puerto 5000): API REST + WebSocket + SPA React.
+"""Dashboard app (port 5000): REST API + WebSocket + React SPA.
 
-Monta los routers por recurso bajo `/api`, un WebSocket nativo en `/hubs/stream`
-(reemplazo de SignalR) y sirve el build de React (`web/dist`) si existe.
+Mounts the per-resource routers under `/api`, a native WebSocket at `/hubs/stream`
+(replacing SignalR) and serves the React build (`web/dist`) if it exists.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from ..realtime import manager
 from . import auth, blocks, dashboard, honeypots, monitoring, node, scenarios, sensors, sessions
 from .auth import require_user
 
-_CLIENTS = Path(__file__).resolve().parents[1] / "clients"  # scripts del shipper (entrega aparte)
-_AGENT_DIST = Path(__file__).resolve().parents[1] / "agent" / "dist"  # binarios del agente (build aparte)
+_CLIENTS = Path(__file__).resolve().parents[1] / "clients"  # shipper scripts (delivered separately)
+_AGENT_DIST = Path(__file__).resolve().parents[1] / "agent" / "dist"  # agent binaries (separate build)
 _BUNDLES = Path(settings.db_path).resolve().parent / "bundles"  # ZIPs generados
 
 _DIST = Path(settings.web_dist) if settings.web_dist else Path(__file__).resolve().parents[2] / "web" / "dist"
@@ -51,8 +51,8 @@ def create_app() -> FastAPI:
         allow_credentials=True,
     )
 
-    # Login/logout/me: público (la guarda vive dentro de /me). El resto del dashboard
-    # queda protegido por sesión (require_user).
+    # Login/logout/me: public (the guard lives inside /me). The rest of the dashboard
+    # is protected by session (require_user).
     app.include_router(auth.router, prefix="/api")
     for router in (
         dashboard.router,
@@ -65,25 +65,25 @@ def create_app() -> FastAPI:
     ):
         app.include_router(router, prefix="/api", dependencies=[Depends(require_user)])
 
-    # Endpoints de cara a los sensores (sin prefijo /api): /ingest/*, /control.
-    # Conservan su autenticación HMAC propia; NO llevan la sesión del dashboard.
+    # Sensor-facing endpoints (no /api prefix): /ingest/*, /control.
+    # They keep their own HMAC authentication; they do NOT carry the dashboard session.
     app.include_router(node.router)
 
     @app.get("/s/{token}", response_class=PlainTextResponse)
     def install_script(token: str) -> str:
-        """Instalador de un comando (curl | sh). La install_token es de un solo uso."""
+        """One-command installer (curl | sh). The install_token is single-use."""
         with SessionLocal() as db:
             s = db.scalar(select(Sensor).where(Sensor.install_token == token, Sensor.retired.is_(False)).limit(1))
             if s is None:
-                raise HTTPException(status_code=404, detail="token inválido o ya usado")
+                raise HTTPException(status_code=404, detail="invalid or already used token")
             key_id, secret, kind, sid, base = s.key_id, s.api_secret, s.kind, s.id, s.base_path
             s.install_token = None  # consumir
             db.commit()
         if kind == "agentless":
             steps = provisioning.agentless_steps(sid, key_id, secret, base, bundle_count=3)
-            body = "#!/bin/sh\n# Configuración agentless de Moqesh (revisa antes de ejecutar)\n"
+            body = "#!/bin/sh\n# Moqesh agentless setup (review before running)\n"
             body += f"mkdir -p /opt/moqesh\n{steps['steps'][0]}\n"
-            body += f"echo \"Cron a añadir:\"\necho '{steps['cron']}'\n"
+            body += f"echo \"Cron entry to add:\"\necho '{steps['cron']}'\n"
             return body
         return provisioning.agent_install_script(key_id, secret)
 
@@ -92,14 +92,14 @@ def create_app() -> FastAPI:
         safe = target.replace("/", "_").replace("..", "")
         path = _AGENT_DIST / f"moqesh-agent-{safe}"
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="binario del agente no disponible (build pendiente)")
+            raise HTTPException(status_code=404, detail="agent binary not available (build pending)")
         return FileResponse(path, filename="moqesh-agent")
 
     @app.get("/download/shipper/{sensor_id}")
     def download_shipper(sensor_id: int) -> FileResponse:
         path = _CLIENTS / "moqesh-ship.sh"
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="script de envío no disponible")
+            raise HTTPException(status_code=404, detail="shipping script not available")
         return FileResponse(path, filename="moqesh-ship.sh", media_type="text/x-shellscript")
 
     @app.get("/download/bundle/{bundle_id}")
@@ -109,14 +109,14 @@ def create_app() -> FastAPI:
             path = _BUNDLES / f"{safe}{ext}"
             if path.is_file():
                 return FileResponse(path, filename=path.name)
-        raise HTTPException(status_code=404, detail="bundle no encontrado")
+        raise HTTPException(status_code=404, detail="bundle not found")
 
     @app.websocket("/hubs/stream")
     async def stream(ws: WebSocket) -> None:
         await manager.connect(ws)
         try:
             while True:
-                await ws.receive_text()  # mantiene viva la conexión (ignora el contenido)
+                await ws.receive_text()  # keeps the connection alive (ignores the content)
         except WebSocketDisconnect:
             manager.disconnect(ws)
         except Exception:

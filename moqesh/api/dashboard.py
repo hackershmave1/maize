@@ -1,4 +1,4 @@
-"""Router del dashboard: overview, timeline y métricas de Token Exhaust."""
+"""Dashboard router: overview, timeline and Token Exhaust metrics."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Integración de la API y el honeypot (TestClient, sin arrancar uvicorn)."""
+"""API and honeypot integration (TestClient, without starting uvicorn)."""
 
 from fastapi.testclient import TestClient
 
@@ -20,7 +20,7 @@ def test_scenarios_builtins_and_import():
     with TestClient(app) as client:
         assert set(client.get("/api/scenarios/builtins").json()) >= {"corp-breach", "git-leak"}
         scn = client.get("/api/scenarios").json()
-        assert any(s["name"] == "corp-breach" for s in scn)  # sembrado por defecto
+        assert any(s["name"] == "corp-breach" for s in scn)  # seeded by default
 
 
 def test_honeypot_crawl_detects_agent():
@@ -28,7 +28,7 @@ def test_honeypot_crawl_detects_agent():
 
     with TestClient(app) as client:
         headers = {"User-Agent": "python-requests/2.31 (langchain)"}
-        # Sigue enlaces del landing en profundidad para disparar varias reglas.
+        # Follow the landing's links in depth to fire several rules.
         seen, frontier, hits = set(), ["/"], 0
         import re
 
@@ -45,7 +45,7 @@ def test_honeypot_crawl_detects_agent():
                     if href.startswith(("../", "http")):
                         continue
                     frontier.append((path.rstrip("/") + "/" + href) if path != "/" else "/" + href)
-    # Consulta directa a la DB (el honeypot y la API comparten SQLite).
+    # Direct DB query (the honeypot and the API share SQLite).
     from sqlalchemy import select
 
     from moqesh.db import SessionLocal

@@ -1,4 +1,4 @@
-"""Motor de escenarios CTF: gates de credenciales, rutas ocultas, forge."""
+"""CTF scenario engine: credential gates, hidden paths, forge."""
 
 from moqesh.scenarios import (
     BUILTIN_PACKS,
@@ -59,13 +59,13 @@ def test_gate_allows_with_valid_credential_and_flags_reuse():
         data, ctx, ScenarioRequest(path="/api/internal/vault", headers={"Authorization": f"Bearer {bearer}"})
     )
     assert res is not None and res.status == 200
-    assert res.used_planted_cred_key == "svc_bearer"  # señal de credential_reuse
+    assert res.used_planted_cred_key == "svc_bearer"  # credential_reuse signal
     assert b"portal-secrets" in res.body
 
 
 def test_hidden_node_not_resolved_as_none_but_hinted():
     data, engine = _corp_data(), ScenarioEngine()
-    # /backup/ es oculto pero existe como nodo: se sirve; la pista viene de /robots.txt.
+    # /backup/ is hidden but exists as a node: it is served; the hint comes from /robots.txt.
     assert "/backup/" in engine.hints_from(data, "/robots.txt")
 
 

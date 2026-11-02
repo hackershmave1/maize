@@ -1,4 +1,4 @@
-"""Router de bloqueos: listar, bloquear (manual) y desbloquear IPs."""
+"""Blocks router: list, block (manually) and unblock IPs."""
 
 from __future__ import annotations
 

@@ -29,7 +29,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     check();
-    // Cualquier 401 en la app (sesión caducada) nos devuelve al login.
+    // Any 401 in the app (expired session) sends us back to login.
     const onUnauth = () => {
       setUser(null);
       setState('out');
@@ -42,7 +42,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       await api.auth.logout();
     } catch {
-      /* da igual: limpiamos el estado local de todos modos */
+      /* does not matter: we clear the local state anyway */
     }
     setUser(null);
     setState('out');
@@ -51,7 +51,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (state === 'loading') {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center text-fg-muted text-sm">
-        Cargando…
+        Loading...
       </div>
     );
   }

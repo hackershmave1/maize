@@ -1,11 +1,11 @@
-"""Proveedores del worldsmith: ejecutan el bucle de agente sobre un `BuildSandbox`.
+"""Worldsmith providers: they run the agent loop over a `BuildSandbox`.
 
-- `StubProvider`: determinista, sin LLM (tests sin coste y build offline reproducible).
-- `ApiProvider`: bucle tool-use de la Messages API de Anthropic (httpx crudo, como `ai_analyst`).
-- `ClaudeCliProvider`: subproceso `claude -p` acotado al sandbox; la red de seguridad es la
-  re-validación del árbol completo antes de publicar (`builder.validate_tree`).
+- `StubProvider`: deterministic, no LLM (zero-cost tests and a reproducible offline build).
+- `ApiProvider`: tool-use loop on Anthropic's Messages API (raw httpx, like `ai_analyst`).
+- `ClaudeCliProvider`: a `claude -p` subprocess confined to the sandbox; the safety net is the
+  re-validation of the entire tree before publishing (`builder.validate_tree`).
 
-Todos comparten `TOOL_SPECS` (contrato de herramientas) y `dispatch()` (ejecución segura).
+All share `TOOL_SPECS` (the tool contract) and `dispatch()` (safe execution).
 """
 
 from __future__ import annotations
@@ -22,18 +22,18 @@ from .tools import BuildSandbox
 
 logger = logging.getLogger("moqesh.worldsmith")
 
-# Contrato de herramientas (esquema estilo Anthropic tools). El prompt lo refleja en prosa.
+# Tool contract (Anthropic tools-style schema). The prompt mirrors it in prose.
 TOOL_SPECS: list[dict] = [
     {
         "name": "write_file",
-        "description": "Escribe un fichero ESTÁTICO e inerte en el build (HTML/CSS/JS/JSON/SVG/txt...). "
-        "El servidor solo sirve bytes; nada se ejecuta. Nada de PHP/ASP/JSP ni cargas externas "
-        "(todo same-origin). Devuelve {ok} o {ok:false, reasons:[...]} para corregir.",
+        "description": "Write a STATIC, inert file into the build (HTML/CSS/JS/JSON/SVG/txt...). "
+        "The server only serves bytes; nothing executes. No PHP/ASP/JSP and no external loads "
+        "(everything same-origin). Returns {ok} or {ok:false, reasons:[...]} so you can fix it.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "ruta relativa en el build, p.ej. sites/console/index.html"},
-                "content": {"type": "string", "description": "contenido (texto; base64 si encoding=base64)"},
+                "path": {"type": "string", "description": "relative path in the build, e.g. sites/console/index.html"},
+                "content": {"type": "string", "description": "content (text; base64 if encoding=base64)"},
                 "encoding": {"type": "string", "enum": ["utf-8", "base64"], "default": "utf-8"},
             },
             "required": ["path", "content"],
@@ -41,33 +41,33 @@ TOOL_SPECS: list[dict] = [
     },
     {
         "name": "delete_file",
-        "description": "Borra un fichero del build.",
+        "description": "Delete a file from the build.",
         "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
     },
     {
         "name": "list_files",
-        "description": "Lista los ficheros ya escritos en el build.",
+        "description": "List the files already written to the build.",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "read_file",
-        "description": "Lee un fichero de texto del build.",
+        "description": "Read a text file from the build.",
         "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
     },
     {
         "name": "list_seed",
-        "description": "Lista los ficheros de la semilla curada (plantillas de portal de referencia).",
+        "description": "List the files in the curated seed (reference portal templates).",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "read_seed",
-        "description": "Lee un fichero de la semilla curada para imitar su estilo.",
+        "description": "Read a file from the curated seed to imitate its style.",
         "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
     },
     {
         "name": "set_manifest",
-        "description": "Registra los portales: cada mount monta un directorio del build bajo un prefijo de URL. "
-        "Llamar al final, cuando los directorios ya existen.",
+        "description": "Register the portals: each mount mounts a build directory under a URL prefix. "
+        "Call it at the end, once the directories exist.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -76,8 +76,8 @@ TOOL_SPECS: list[dict] = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "prefix": {"type": "string", "description": "prefijo de URL, '/' para la raíz"},
-                            "dir": {"type": "string", "description": "directorio del build, p.ej. sites/console"},
+                            "prefix": {"type": "string", "description": "URL prefix, '/' for the root"},
+                            "dir": {"type": "string", "description": "build directory, e.g. sites/console"},
                             "spa": {"type": "boolean", "default": False},
                         },
                         "required": ["prefix", "dir"],
@@ -89,10 +89,10 @@ TOOL_SPECS: list[dict] = [
     },
     {
         "name": "plant_bait",
-        "description": "Planta UN honeytoken vivo en la ruta de caza del atacante: un backup de entorno "
-        "filtrado (leak_paths, con el placeholder {{cred:KEY}}) que lleva a una consola protegida "
-        "(gate_paths) que exige ese token. robots_disallow revela las rutas como cebo. "
-        "EXACTAMENTE una credencial viva.",
+        "description": "Plant ONE live honeytoken on the attacker's hunting path: a leaked environment "
+        "backup (leak_paths, with the {{cred:KEY}} placeholder) that leads to a protected console "
+        "(gate_paths) requiring that token. robots_disallow reveals the paths as a lure. "
+        "EXACTLY one live credential.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -101,18 +101,18 @@ TOOL_SPECS: list[dict] = [
                 "leak_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "rutas donde se filtra el backup, p.ej. /.env, /env.bak",
+                    "description": "paths where the backup leaks, e.g. /.env, /env.bak",
                 },
                 "leak_body": {
                     "type": "string",
-                    "description": "contenido del backup; debe incluir {{cred:KEY}} una vez",
+                    "description": "backup content; must include {{cred:KEY}} once",
                 },
                 "gate_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "rutas de la consola gated, p.ej. /internal/ops, /ops",
+                    "description": "paths of the gated console, e.g. /internal/ops, /ops",
                 },
-                "gate_body": {"type": "string", "description": "HTML de la consola al presentar el token"},
+                "gate_body": {"type": "string", "description": "console HTML shown when the token is presented"},
                 "robots_disallow": {"type": "array", "items": {"type": "string"}},
             },
             "required": ["credential_key", "leak_paths", "leak_body", "gate_paths", "gate_body"],
@@ -120,7 +120,7 @@ TOOL_SPECS: list[dict] = [
     },
     {
         "name": "finish",
-        "description": "Termina el build. Llamar cuando el World esté completo, el manifest puesto y el cebo plantado.",
+        "description": "Finish the build. Call it once the World is complete, the manifest set and the lure planted.",
         "input_schema": {"type": "object", "properties": {"summary": {"type": "string"}}},
     },
 ]
@@ -147,17 +147,17 @@ _DISPATCH = {
 
 
 def dispatch(sandbox: BuildSandbox, name: str, args: dict[str, Any]) -> dict:
-    """Ejecuta una herramienta de forma segura. Nunca lanza: devuelve {ok:false,...} ante cualquier fallo."""
+    """Run a tool safely. Never raises: returns {ok:false,...} on any failure."""
     fn = _DISPATCH.get(name)
     if fn is None:
         return {"ok": False, "error": f"herramienta desconocida: {name}"}
     if not isinstance(args, dict):
-        return {"ok": False, "error": "argumentos no son un objeto"}
+        return {"ok": False, "error": "arguments are not an object"}
     try:
         return fn(sandbox, args)
-    except Exception as e:  # red de seguridad dura: una herramienta jamás tumba el bucle
-        logger.warning("[worldsmith] herramienta %s falló: %s", name, e)
-        return {"ok": False, "error": f"excepción en {name}: {e}"}
+    except Exception as e:  # hard safety net: a tool never takes down the loop
+        logger.warning("[worldsmith] tool %s failed: %s", name, e)
+        return {"ok": False, "error": f"exception in {name}: {e}"}
 
 
 class Provider(Protocol):
@@ -168,10 +168,10 @@ class Provider(Protocol):
 
 
 class StubProvider:
-    """Construye un World multi-portal válido + cebo SIN LLM. Determinista y reproducible.
+    """Build a valid multi-portal World + lure WITHOUT an LLM. Deterministic and reproducible.
 
-    Sirve para: (a) tests sin coste de la capa de herramientas/validación/publicación de extremo
-    a extremo; (b) un build offline por defecto cuando no hay proveedor de IA configurado.
+    Useful for: (a) zero-cost end-to-end tests of the tools/validation/publishing layer;
+    (b) a default offline build when no AI provider is configured.
     """
 
     name = "stub"
@@ -198,7 +198,7 @@ class StubProvider:
             content=(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width,initial-scale=1">'
-                f"<title>{brand} — Operations</title>"
+                f"<title>{brand} - Operations</title>"
                 '<link rel="stylesheet" href="/assets/app.css"></head><body>'
                 f"<header>{brand} · Operations</header><main>"
                 "<div class=\"card\"><h2>Service status</h2><p>All systems "
@@ -252,15 +252,15 @@ class StubProvider:
         )
         gate_html = (
             '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            f"<title>{brand} — Ops Console</title></head><body>"
+            f"<title>{brand} - Ops Console</title></head><body>"
             f"<h1>{brand} Ops Console</h1><p>Signed in with a service token. Environment: production.</p>"
             "<table><tr><th>User</th><th>Role</th></tr><tr><td>m.alvarez</td><td>admin</td></tr>"
             "<tr><td>t.okafor</td><td>operator</td></tr></table></body></html>"
         )
         leak = (
-            f"# {brand} — production environment (backup)\nNODE_ENV=production\n"
+            f"# {brand} - production environment (backup)\nNODE_ENV=production\n"
             "APP_URL=https://console.internal\nSESSION_SECRET=***REDACTED***\n"
-            "# ops dashboard service token — rotate after the Q3 migration\n"
+            "# ops dashboard service token - rotate after the Q3 migration\n"
             "OPS_API_TOKEN={{cred:ops_token}}\nOPS_DASHBOARD_URL=/internal/ops\n"
         )
         call(
@@ -272,14 +272,14 @@ class StubProvider:
             gate_body=gate_html,
             robots_disallow=["/api/", "/internal/", "/internal/ops", "/ops/"],
         )
-        call("finish", summary=f"World stub de {brand}: 3 portales + cebo ops_token.")
+        call("finish", summary=f"Stub World for {brand}: 3 portals + ops_token lure.")
         return {"ok": True, "provider": "stub", "calls": calls, "summary": sandbox.summary}
 
 
 def _brand_from_brief(brief: str) -> str:
     for line in (brief or "").splitlines():
         low = line.lower()
-        if "brand" in low or "marca" in low:
+        if "brand" in low:
             parts = line.split(":", 1)
             if len(parts) == 2 and parts[1].strip():
                 return parts[1].strip()[:40]
@@ -290,7 +290,7 @@ def _brand_from_brief(brief: str) -> str:
 
 
 class ApiProvider:
-    """Bucle tool-use contra la Messages API de Anthropic (httpx síncrono, degradación limpia)."""
+    """Tool-use loop against Anthropic's Messages API (synchronous httpx, clean degradation)."""
 
     name = "api"
 
@@ -310,7 +310,7 @@ class ApiProvider:
         self.max_steps = max_steps
         self.max_tokens = max_tokens
         self.timeout = timeout
-        self._transport = transport  # para tests (httpx.MockTransport); None = red real
+        self._transport = transport  # for tests (httpx.MockTransport); None = real network
 
     def build(self, sandbox: BuildSandbox, system_prompt: str, brief: str) -> dict:
         import httpx
@@ -349,7 +349,7 @@ class ApiProvider:
                     messages.append({"role": "assistant", "content": content})
                     tool_uses = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
                     if not tool_uses:
-                        break  # el modelo paró sin más herramientas
+                        break  # the model stopped with no more tools
                     results = []
                     for tu in tool_uses:
                         out = dispatch(sandbox, tu.get("name", ""), tu.get("input", {}))
@@ -362,8 +362,8 @@ class ApiProvider:
                             }
                         )
                     messages.append({"role": "user", "content": results})
-        except Exception as e:  # red de seguridad: nunca propaga
-            logger.warning("[worldsmith] ApiProvider falló: %s", e)
+        except Exception as e:  # safety net: never propagates
+            logger.warning("[worldsmith] ApiProvider failed: %s", e)
             return {"ok": False, "provider": "api", "error": str(e), "steps": steps}
         return {"ok": sandbox.done, "provider": "api", "steps": steps, "summary": sandbox.summary}
 
@@ -372,13 +372,13 @@ class ApiProvider:
 
 
 class ClaudeCliProvider:
-    """Usa el CLI `claude -p` acotado al sandbox (Read/Write/Edit, sin bash/red). El CLI escribe
-    los ficheros del World + manifest.json + un `_worldsmith_bait.json` (convención) que luego
-    INGERIMOS por nuestro `plant_bait` validado. La inertness la garantiza la re-validación
-    completa del árbol antes de publicar (`builder.validate_tree`).
+    """Uses the `claude -p` CLI confined to the sandbox (Read/Write/Edit, no bash/network). The CLI writes
+    the World files + manifest.json + a `_worldsmith_bait.json` (by convention) that we then
+    INGEST through our validated `plant_bait`. Inertness is guaranteed by the full
+    re-validation of the tree before publishing (`builder.validate_tree`).
 
-    Autenticación: usa las credenciales del CLI (o `CLAUDE_CODE_OAUTH_TOKEN` del entorno, p.ej. un
-    token de `claude setup-token`), heredadas por el subproceso.
+    Authentication: uses the CLI's credentials (or `CLAUDE_CODE_OAUTH_TOKEN` from the environment, e.g. a
+    token from `claude setup-token`), inherited by the subprocess.
     """
 
     name = "claude_cli"
@@ -391,7 +391,7 @@ class ClaudeCliProvider:
 
     def build(self, sandbox: BuildSandbox, system_prompt: str, brief: str) -> dict:
         if shutil.which(self.binary) is None:
-            return {"ok": False, "provider": "claude_cli", "error": f"binario '{self.binary}' no encontrado"}
+            return {"ok": False, "provider": "claude_cli", "error": f"binary '{self.binary}' not found"}
         prompt = f"{CLI_SYSTEM_PROMPT}\n\n--- BRIEF ---\n{brief}\n"
         cmd = [
             self.binary, "-p", prompt,
@@ -419,10 +419,10 @@ class ClaudeCliProvider:
         }
 
     def ingest(self, sandbox: BuildSandbox) -> dict:
-        """Reindexa los ficheros que escribió el CLI y planta el cebo desde `_worldsmith_bait.json`.
+        """Reindex the files the CLI wrote and plant the lure from `_worldsmith_bait.json`.
 
-        El fichero de cebo se borra tras leerlo (no debe publicarse como parte del World). Expuesto
-        aparte de `build` para poder testearlo sin invocar el binario real.
+        The lure file is deleted after reading it (it must not be published as part of the World). Exposed
+        separately from `build` so it can be tested without invoking the real binary.
         """
         sandbox.files = {}
         for dp, _dn, fn in os.walk(sandbox.root):
@@ -437,15 +437,15 @@ class ClaudeCliProvider:
                     pass
         bait_path = os.path.join(sandbox.root, self.BAIT_FILE)
         if not os.path.isfile(bait_path):
-            return {"ok": False, "error": f"el CLI no escribió {self.BAIT_FILE} (sin cebo)"}
+            return {"ok": False, "error": f"the CLI did not write {self.BAIT_FILE} (no lure)"}
         try:
             spec = json.loads(open(bait_path, "rb").read().decode("utf-8"))
         except (OSError, ValueError, UnicodeDecodeError) as e:
             os.remove(bait_path)
             return {"ok": False, "error": f"{self.BAIT_FILE} ilegible: {e}"}
-        os.remove(bait_path)  # artefacto de build; NO se sirve
+        os.remove(bait_path)  # build artifact; NOT served
         if not isinstance(spec, dict):
-            return {"ok": False, "error": f"{self.BAIT_FILE} no es un objeto"}
+            return {"ok": False, "error": f"{self.BAIT_FILE} is not an object"}
         return sandbox.plant_bait(
             spec.get("credential_key", ""),
             spec.get("leak_paths", []),

@@ -1,8 +1,8 @@
-"""Worldsmith: agente IA que CONSTRUYE y evoluciona el contenido inerte del World
-y el pack de cebo, con una red de seguridad de inertness que nunca se salta.
+"""Worldsmith: an AI agent that BUILDS and evolves the World's inert content
+and the lure pack, with an inertness safety net that is never skipped.
 
-Distinto de `moqesh/agent/` (el sensor remoto que reporta hits). Aquí el agente
-PRODUCE ficheros estáticos; Moqesh los sirve como bytes y nunca los ejecuta.
+Distinct from `moqesh/agent/` (the remote sensor that reports hits). Here the agent
+PRODUCES static files; Moqesh serves them as bytes and never executes them.
 """
 
 from .validate import (

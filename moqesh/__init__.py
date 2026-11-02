@@ -1,3 +1,3 @@
-"""Moqesh AI — honeypot anti-agentes IA (Token Exhaust)."""
+"""Moqesh AI: a honeypot against AI agents (Token Exhaust)."""
 
 __version__ = "0.1.0"

@@ -1,18 +1,18 @@
-"""Perfiles de sitio built-in, seleccionables por despliegue.
+"""Built-in site profiles, selectable per deployment.
 
-Un perfil es un dict JSON (mismo contrato que el perfil Mimic de `mimic.py`, más
-`theme` y `api_resources`) que da al laberinto una taxonomía de rutas, vocabulario y
-colecciones de API realistas SIN crawlear nada. Lo consume el generador vía
-`LabyrinthOptions.profile`. Elegible con `MOQESH_SITE_PROFILE=<nombre>`.
+A profile is a JSON dict (same contract as the Mimic profile from `mimic.py`, plus
+`theme` and `api_resources`) that gives the labyrinth a realistic route taxonomy, vocabulary and
+API collections WITHOUT crawling anything. The generator consumes it via
+`LabyrinthOptions.profile`. Selectable with `MOQESH_SITE_PROFILE=<name>`.
 
-Contrato (todas opcionales; el generador degrada con elegancia si faltan):
+Contract (all optional; the generator degrades gracefully if missing):
     {
-      "theme":          "saas|corporate|devops|ecommerce",  # tema de vocabulario base
-      "server_banner":  "cloudflare",                       # cabecera Server
-      "vocabulary":     [...],   # palabras de dominio -> nombres de directorio
-      "paths":          [...],   # rutas observadas ("/console/", "/billing/")
-      "api_prefixes":   [...],   # prefijos de API ("/api/v2")
-      "api_resources":  [...],   # colecciones de API que EXISTEN ("tenant", "invoice")
+      "theme":          "saas|corporate|devops|ecommerce",  # base vocabulary theme
+      "server_banner":  "cloudflare",                       # Server header
+      "vocabulary":     [...],   # domain words -> directory names
+      "paths":          [...],   # observed paths ("/console/", "/billing/")
+      "api_prefixes":   [...],   # API prefixes ("/api/v2")
+      "api_resources":  [...],   # API collections that EXIST ("tenant", "invoice")
     }
 """
 
@@ -25,15 +25,15 @@ _DIR = Path(__file__).parent
 
 
 def available() -> list[str]:
-    """Nombres de perfiles built-in disponibles (p.ej. ['corp', 'ecommerce', 'nonprofit', 'saas'])."""
+    """Names of available built-in profiles (e.g. ['corp', 'ecommerce', 'nonprofit', 'saas'])."""
     return sorted(p.stem for p in _DIR.glob("*.json"))
 
 
 def load_builtin(name: str) -> dict | None:
-    """Carga un perfil built-in por nombre; None si no existe o está corrupto.
+    """Load a built-in profile by name; None if it does not exist or is corrupt.
 
-    Solo acepta nombres de fichero simples (sin separadores de ruta): el nombre viene de
-    configuración del operador, pero validarlo evita cualquier escape de directorio.
+    Only accepts simple file names (no path separators): the name comes from
+    operator configuration, but validating it prevents any directory escape.
     """
     if not name or "/" in name or "\\" in name or name.startswith("."):
         return None

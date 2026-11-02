@@ -1,8 +1,8 @@
-"""Capa de datos: engine SQLite + sesiones + inicialización/seed.
+"""Data layer: SQLite engine + sessions + initialization/seed.
 
-Síncrono a propósito (SQLite). Los endpoints `def` de FastAPI corren en su
-threadpool, así que cada petición usa su propia `Session`. El HTTP saliente
-(mimic, LLM, webhooks) sí es async y vive en otros módulos.
+Synchronous on purpose (SQLite). FastAPI `def` endpoints run in its
+threadpool, so each request uses its own `Session`. Outbound HTTP
+(mimic, LLM, webhooks) is async and lives in other modules.
 """
 
 from __future__ import annotations
@@ -26,56 +26,56 @@ SessionLocal = sessionmaker(bind=_engine, class_=Session, expire_on_commit=False
 
 
 def get_session() -> Iterator[Session]:
-    """Dependencia FastAPI: cede una Session y la cierra al terminar."""
+    """FastAPI dependency: yields a Session and closes it when done."""
     with SessionLocal() as s:
         yield s
 
 
-# 14 reglas conductuales/CTF (las 4 fuertes se alimentan del motor de escenarios).
+# 14 behavioral/CTF rules (the 4 strong ones are fed by the scenario engine).
 _SEED_RULES = [
-    (1, "Timing intermedio", "Inter-request intervals 2-30s; el LLM pausa mientras razona.", 0.15, "timing_analysis"),
-    (2, "Secuencia predecible", "Acceso secuencial a todos los archivos (curl→file→exec).", 0.25, "sequence_pattern"),
-    (3, "Descarga exhaustiva", "Descarga TODOS los archivos listados sin discriminar.", 0.15, "download_pattern"),
-    (4, "README literal", "Ejecuta los comandos del README tal cual, en orden.", 0.20, "readme_following"),
-    (5, "JS deobfuscation", "Accede a endpoints solo visibles desofuscando JS.", 0.10, "js_deobfuscation"),
-    (6, "User-Agent / headers", "User-Agents conocidos de crawlers/clientes de IA.", 0.05, "user_agent"),
+    (1, "Intermediate timing", "Inter-request intervals 2-30s; the LLM pauses to reason.", 0.15, "timing_analysis"),
+    (2, "Predictable sequence", "Sequential access to every file (curl->file->exec).", 0.25, "sequence_pattern"),
+    (3, "Exhaustive download", "Downloads ALL listed files indiscriminately.", 0.15, "download_pattern"),
+    (4, "Literal README", "Runs the README's commands verbatim, in order.", 0.20, "readme_following"),
+    (5, "JS deobfuscation", "Hits endpoints only visible by deobfuscating JS.", 0.10, "js_deobfuscation"),
+    (6, "User-Agent / headers", "Known User-Agents of AI crawlers/clients.", 0.05, "user_agent"),
     (
         7,
         "Breadcrumb following",
-        "Sigue la cadena de enlaces generados hacia más profundidad.",
+        "Follows the chain of generated links ever deeper.",
         0.10,
         "breadcrumb_following",
     ),
-    (8, "Descenso profundo", "Baja 5+ niveles siguiendo configs/.env (no humano).", 0.15, "depth_descent"),
+    (8, "Deep descent", "Goes down 5+ levels following configs/.env (not human).", 0.15, "depth_descent"),
     (
         9,
-        "Fan-out exhaustivo",
-        "Sigue casi todos los enlaces de cada página (cobertura ~total).",
+        "Exhaustive fan-out",
+        "Follows nearly every link on each page (~total coverage).",
         0.15,
         "exhaustive_fanout",
     ),
-    (10, "Sin render de assets", "Nunca pide CSS/JS/img/favicon: no hay navegador.", 0.10, "no_asset_render"),
+    (10, "No asset rendering", "Never requests CSS/JS/img/favicon: there is no browser.", 0.10, "no_asset_render"),
     (
         11,
-        "Reuso de credenciales",
-        "Presentó un honeytoken plantado en un gate: casi certeza.",
+        "Credential reuse",
+        "Presented a planted honeytoken at a gate: near certainty.",
         0.35,
         "credential_reuse",
     ),
-    (12, "Acceso a ruta oculta", "Accedió a una ruta no enlazada (pistas/fuzzing).", 0.20, "hidden_path_access"),
+    (12, "Hidden path access", "Accessed an unlinked path (hints/fuzzing).", 0.20, "hidden_path_access"),
     (
         13,
-        "Follow-up de decompilación",
-        "Descargó un binario y siguió una ruta embebida en él.",
+        "Decompilation follow-up",
+        "Downloaded a binary and followed a path embedded in it.",
         0.20,
         "binary_decompile_followup",
     ),
-    (14, "Fuerza bruta de auth", "Múltiples intentos fallidos contra un gate.", 0.10, "auth_bruteforce"),
+    (14, "Auth brute force", "Multiple failed attempts against a gate.", 0.10, "auth_bruteforce"),
 ]
 
 
 def init_db() -> None:
-    """Crea el esquema y siembra reglas, honeypot por defecto y escenario builtin."""
+    """Create the schema and seed rules, the default honeypot and the built-in scenario."""
     Base.metadata.create_all(_engine)
     with SessionLocal() as s:
         if s.scalar(select(DetectionRule).limit(1)) is None:
@@ -103,7 +103,7 @@ def init_db() -> None:
                     brand_name=settings.brand_name,
                 )
             )
-        # Sensor `local`: el propio honeypot visto como sensor (mismo seed).
+        # `local` sensor: the honeypot itself seen as a sensor (same seed).
         if s.scalar(select(Sensor).where(Sensor.kind == "local").limit(1)) is None:
             s.add(
                 Sensor(
@@ -123,7 +123,7 @@ def init_db() -> None:
             )
         s.commit()
 
-    # Siembra el escenario CTF incorporado (import diferido: evita ciclo de importación).
+    # Seed the built-in CTF scenario (deferred import: avoids an import cycle).
     from .scenarios import seed_builtin
 
     with SessionLocal() as s:

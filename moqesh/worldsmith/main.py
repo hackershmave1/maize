@@ -1,8 +1,8 @@
-"""CLI del worldsmith: `python -m moqesh.worldsmith build|evolve`.
+"""Worldsmith CLI: `python -m moqesh.worldsmith build|evolve`.
 
-Construye (o evoluciona) el World y publica si pasa la validación de inertness; importa el
-pack de cebo como escenario activo. El proveedor y los parámetros salen de la config (prefijo
-MOQESH_) y se pueden sobreescribir por flags.
+Builds (or evolves) the World and publishes it if it passes inertness validation; imports the
+lure pack as the active scenario. The provider and parameters come from config (MOQESH_
+prefix) and can be overridden by flags.
 """
 
 from __future__ import annotations
@@ -27,14 +27,14 @@ def _provider(name_override: str | None, model_override: str | None):
 
 def _add_common(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--provider", help="stub | api | claude_cli (default: config)")
-    sp.add_argument("--model", help="modelo del proveedor (api/claude_cli)")
-    sp.add_argument("--brand", default="", help="marca/identidad del sitio")
-    sp.add_argument("--profile", default="", help="perfil de sitio (saas/corp/ecommerce/...)")
-    sp.add_argument("--goal", default="", help="objetivo específico del build")
-    sp.add_argument("--portals", type=int, default=0, help="nº aproximado de portales (default: config)")
-    sp.add_argument("--world-path", default="", help="ruta del World (default: config/junto a la DB)")
-    sp.add_argument("--no-import-bait", action="store_true", help="no importar el pack de cebo")
-    sp.add_argument("--json", action="store_true", help="salida JSON")
+    sp.add_argument("--model", help="provider model (api/claude_cli)")
+    sp.add_argument("--brand", default="", help="site brand/identity")
+    sp.add_argument("--profile", default="", help="site profile (saas/corp/ecommerce/...)")
+    sp.add_argument("--goal", default="", help="specific goal for the build")
+    sp.add_argument("--portals", type=int, default=0, help="approximate number of portals (default: config)")
+    sp.add_argument("--world-path", default="", help="World path (default: config/next to the DB)")
+    sp.add_argument("--no-import-bait", action="store_true", help="do not import the lure pack")
+    sp.add_argument("--json", action="store_true", help="JSON output")
 
 
 def _format(report: dict) -> str:
@@ -46,13 +46,13 @@ def _format(report: dict) -> str:
     for pr in report.get("problems", [])[:20]:
         lines.append(f"  - {pr}")
     if report.get("world_path"):
-        lines.append(f"  world: {report['world_path']}  ({report.get('files')} ficheros)")
+        lines.append(f"  world: {report['world_path']}  ({report.get('files')} files)")
     if report.get("bait"):
         b = report["bait"]
-        lines.append(f"  cebo: {'ok' if b.get('ok') else b.get('error')} "
-                     f"(escenario #{b.get('scenario_id')}, {b.get('nodes')} nodos, activo={b.get('active')})")
+        lines.append(f"  lure: {'ok' if b.get('ok') else b.get('error')} "
+                     f"(scenario #{b.get('scenario_id')}, {b.get('nodes')} nodes, active={b.get('active')})")
     pres = report.get("provider_result", {})
-    lines.append(f"  proveedor: {pres.get('provider')} steps={pres.get('steps', '-')} ok={pres.get('ok')}")
+    lines.append(f"  provider: {pres.get('provider')} steps={pres.get('steps', '-')} ok={pres.get('ok')}")
     if report.get("note"):
         lines.append(f"  nota: {report['note']}")
     return "\n".join(lines)
@@ -60,10 +60,10 @@ def _format(report: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    p = argparse.ArgumentParser(prog="moqesh-worldsmith", description="Constructor IA del World de Moqesh")
+    p = argparse.ArgumentParser(prog="moqesh-worldsmith", description="AI builder for the Moqesh World")
     sub = p.add_subparsers(dest="cmd", required=True)
-    _add_common(sub.add_parser("build", help="construir un World nuevo"))
-    _add_common(sub.add_parser("evolve", help="evolucionar el World actual (rotar cebo, añadir portal)"))
+    _add_common(sub.add_parser("build", help="build a new World"))
+    _add_common(sub.add_parser("evolve", help="evolve the current World (rotate the lure, add a portal)"))
     args = p.parse_args(argv)
 
     world_path = args.world_path or settings.world_path or default_world_path(settings.db_path)
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     if import_bait:
         from ..db import init_db
 
-        init_db()  # idempotente: asegura el esquema antes de importar el pack
+        init_db()  # idempotent: ensures the schema before importing the pack
 
     report = build_world(
         provider=_provider(args.provider, args.model),

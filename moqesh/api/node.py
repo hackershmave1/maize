@@ -1,8 +1,8 @@
-"""Endpoints de cara a los sensores (agente y agentless).
+"""Sensor-facing endpoints (agent and agentless).
 
-Autenticación HMAC simétrica por sensor (`security.verify`), rate-limit, dedup y
-validación hostil de todo lo recibido. Montado SIN prefijo /api: los sensores
-hablan con /ingest/* y /control.
+Symmetric per-sensor HMAC authentication (`security.verify`), rate limiting, dedup and
+hostile validation of everything received. Mounted WITHOUT the /api prefix: sensors
+talk to /ingest/* and /control.
 """
 
 from __future__ import annotations
@@ -23,12 +23,12 @@ from ..realtime import manager
 logger = logging.getLogger("moqesh.node")
 router = APIRouter(tags=["node"])
 
-_MAX_BODY = 2 * 1024 * 1024  # 2 MB por request
+_MAX_BODY = 2 * 1024 * 1024  # 2 MB per request
 _STRONG_KEYS = ("credential_reuse", "hidden_path_access", "binary_decompile_followup", "auth_bruteforce")
 
 
 async def _authed(request: Request) -> tuple[Sensor, bytes]:
-    """Devuelve (sensor, body) tras verificar HMAC + estado. Lanza HTTP si falla."""
+    """Return (sensor, body) after verifying HMAC + status. Raises HTTP on failure."""
     body = await request.body()
     if len(body) > _MAX_BODY:
         raise HTTPException(status_code=413, detail="payload demasiado grande")
@@ -40,8 +40,8 @@ async def _authed(request: Request) -> tuple[Sensor, bytes]:
     with SessionLocal() as db:
         sensor = db.scalar(select(Sensor).where(Sensor.key_id == key_id).limit(1))
         if sensor is None or sensor.retired or not security.verify(sensor.api_secret, ts, sig, body):
-            raise HTTPException(status_code=401, detail="no autorizado")
-        # Copia desacoplada de la sesión para usar fuera del with.
+            raise HTTPException(status_code=401, detail="unauthorized")
+        # Detached copy of the session, for use outside the with block.
         snapshot = Sensor(
             id=sensor.id,
             name=sensor.name,
@@ -90,15 +90,15 @@ def _touch(sensor_id: int, *, ingest: bool, agent_version: str | None = None) ->
 
 @router.post("/ingest/events")
 async def ingest_events(request: Request) -> dict:
-    """Agente: eventos estructurados con señales fuertes ya resueltas localmente."""
+    """Agent: structured events with strong signals already resolved locally."""
     sensor, body = await _authed(request)
     try:
         payload = json.loads(body)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="JSON inválido") from exc
+        raise HTTPException(status_code=400, detail="invalid JSON") from exc
     events = payload.get("events", [])
     if not isinstance(events, list):
-        raise HTTPException(status_code=400, detail="'events' debe ser lista")
+        raise HTTPException(status_code=400, detail="'events' must be a list")
 
     opts = _opts(sensor)
     accepted = 0
@@ -136,17 +136,17 @@ async def ingest_events(request: Request) -> dict:
 
 @router.post("/ingest/logs")
 async def ingest_logs(request: Request) -> dict:
-    """Agentless: líneas de log crudas; el parser central reconstruye y puntúa (conductual)."""
+    """Agentless: raw log lines; the central parser rebuilds and scores them (behavioral)."""
     sensor, body = await _authed(request)
     try:
         payload = json.loads(body)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="JSON inválido") from exc
+        raise HTTPException(status_code=400, detail="invalid JSON") from exc
     fmt = str(payload.get("format", "raw"))
     base = str(payload.get("base_path", sensor.base_path or "/"))
     lines = payload.get("lines", [])
     if not isinstance(lines, list):
-        raise HTTPException(status_code=400, detail="'lines' debe ser lista")
+        raise HTTPException(status_code=400, detail="'lines' must be a list")
 
     reqs = logparse.parse(fmt, [str(x) for x in lines[:20000]], base_path=base)
     opts = _opts(sensor)
@@ -181,7 +181,7 @@ async def ingest_logs(request: Request) -> dict:
 
 @router.get("/control")
 async def control(request: Request) -> Response:
-    """Estado deseado del sensor, con RESPUESTA FIRMADA (integridad del control)."""
+    """The sensor's desired state, with a SIGNED RESPONSE (control integrity)."""
     sensor, _ = await _authed(request)
     _touch(sensor.id, ingest=False)
     scenario_pack = None
@@ -194,7 +194,7 @@ async def control(request: Request) -> Response:
         "enabled": sensor.enabled,
         "seed": sensor.seed,
         "scenario_id": sensor.scenario_id,
-        "scenario": scenario_pack,  # pack firmado → el agente corre gates/CTF reales
+        "scenario": scenario_pack,  # signed pack -> the agent runs real gates/CTF
         "generation_mode": sensor.generation_mode,
         "realism_level": sensor.realism_level,
         "config_version": sensor.config_version,
@@ -211,7 +211,7 @@ async def control(request: Request) -> Response:
 
 
 def _agent_signals(ev: dict):
-    """signals_fn para eventos de agente: persiste progreso y devuelve señales fuertes."""
+    """signals_fn for agent events: persists progress and returns strong signals."""
     strong = ev.get("strong") or {}
     prog_facts = ev.get("progress") or {}
 

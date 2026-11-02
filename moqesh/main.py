@@ -1,6 +1,6 @@
-"""Entrypoint: levanta honeypot (:8080) y dashboard+API (:5000) en un proceso.
+"""Entrypoint: starts the honeypot (:8080) and dashboard+API (:5000) in one process.
 
-Ambas apps ASGI corren sobre el mismo event loop asyncio (una por `uvicorn.Server`).
+Both ASGI apps run on the same asyncio event loop (one per `uvicorn.Server`).
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ from .honeypot import app as honeypot_app
 
 
 async def _serve() -> None:
-    # server_header=False: uvicorn NO añade su propia cabecera `Server: uvicorn`. El honeypot
-    # emite exactamente UNA cabecera `Server` (su banner), como un web server real; dos cabeceras
-    # Server (una del framework, otra del banner) delatarían el montaje.
-    # server_header/date_header=False: uvicorn NO añade sus cabeceras `Server`/`Date`. El
-    # honeypot las emite él mismo, en Title-Case y con un único banner coherente, igual que un
-    # web server real (nginx/IIS); si no, delataría el stack ASGI (minúsculas, doble Server).
+    # server_header=False: uvicorn does NOT add its own `Server: uvicorn` header. The honeypot
+    # emits exactly ONE `Server` header (its banner), like a real web server; two
+    # Server headers (one from the framework, one from the banner) would expose the setup.
+    # server_header/date_header=False: uvicorn does NOT add its `Server`/`Date` headers. The
+    # honeypot emits them itself, in Title-Case and with a single consistent banner, just like a
+    # real web server (nginx/IIS); otherwise it would expose the ASGI stack (lowercase, double Server).
     honeypot = uvicorn.Server(
         uvicorn.Config(
             honeypot_app, host="0.0.0.0", port=settings.honeypot_port,
@@ -34,7 +34,7 @@ async def _serve() -> None:
         )
     )
     print(f"Honeypot  -> http://localhost:{settings.honeypot_port}")
-    print(f"Dashboard -> http://localhost:{settings.dashboard_port}  (API en /api, WS en /hubs/stream)")
+    print(f"Dashboard -> http://localhost:{settings.dashboard_port}  (API at /api, WS at /hubs/stream)")
     await asyncio.gather(honeypot.serve(), dashboard.serve())
 
 

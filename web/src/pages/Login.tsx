@@ -16,7 +16,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
       await api.auth.login(username.trim(), password);
       onSuccess();
     } catch {
-      setError('Credenciales inválidas');
+      setError('Invalid credentials');
       setBusy(false);
     }
   };
@@ -35,11 +35,11 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
           className="bg-surface border border-border rounded-lg p-6 space-y-4 shadow-xl"
         >
           <div>
-            <h1 className="text-base font-medium">Acceso al panel</h1>
-            <p className="text-xs text-fg-muted mt-0.5">Solo operadores autorizados.</p>
+            <h1 className="text-base font-medium">Dashboard sign-in</h1>
+            <p className="text-xs text-fg-muted mt-0.5">Authorized operators only.</p>
           </div>
           <div className="space-y-1.5">
-            <label className="block text-xs text-fg-muted" htmlFor="u">Usuario</label>
+            <label className="block text-xs text-fg-muted" htmlFor="u">Username</label>
             <input
               id="u"
               autoFocus
@@ -50,7 +50,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-xs text-fg-muted" htmlFor="p">Contraseña</label>
+            <label className="block text-xs text-fg-muted" htmlFor="p">Password</label>
             <input
               id="p"
               type="password"
@@ -67,7 +67,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-accent text-bg rounded-md text-sm font-medium hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <LogIn className="w-4 h-4" />
-            {busy ? 'Entrando…' : 'Entrar'}
+            {busy ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>
