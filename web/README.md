@@ -23,6 +23,6 @@ Docker image the build runs in a Node stage and is copied into the Python server
 
 ## Structure
 
-- `src/pages/` — Dashboard, Sessions, Requests, Alerts, Rules, Scenarios, Blocks, **Sensors**.
-- `src/services/api.ts` — typed REST client. `src/services/realtime.ts` — native WebSocket.
-- `src/types/index.ts` — contract types (camelCase, mirroring `moqesh/schemas.py`).
+- `src/pages/`: Dashboard, Sessions, Requests, Alerts, Rules, Scenarios, Blocks, **Sensors**.
+- `src/services/api.ts`: typed REST client. `src/services/realtime.ts`: native WebSocket.
+- `src/types/index.ts`: contract types (camelCase, mirroring `moqesh/schemas.py`).
