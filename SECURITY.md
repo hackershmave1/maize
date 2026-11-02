@@ -1,34 +1,34 @@
-# Política de seguridad
+# Security policy
 
-Moqesh AI es una herramienta **defensiva** (honeypot/deception). Agradecemos la
-divulgación responsable de vulnerabilidades.
+Moqesh AI is a **defensive** tool (honeypot/deception). We appreciate responsible
+disclosure of vulnerabilities.
 
-## Reportar una vulnerabilidad
+## Reporting a vulnerability
 
-- **No** abras un issue público.
-- Usa los **GitHub Security Advisories** privados del repositorio
-  (pestaña *Security → Report a vulnerability*).
-- Incluye versión/commit, pasos de reproducción y el impacto. Respondemos lo antes posible
-  y coordinamos la divulgación tras un arreglo.
+- Do **not** open a public issue.
+- Use the repository's private **GitHub Security Advisories**
+  (the *Security → Report a vulnerability* tab).
+- Include the version/commit, reproduction steps and the impact. We reply as soon as possible
+  and coordinate disclosure after a fix.
 
-## Modelo de amenaza y decisiones de diseño
+## Threat model and design decisions
 
-Moqesh se despliega, por definición, en entornos hostiles. Supuestos clave:
+By definition, Moqesh is deployed in hostile environments. Key assumptions:
 
-- El **honeypot es atacado a propósito**. El contenido-cebo (claves AWS/JWT/DB,
-  binarios señuelo) es **inerte**: no corresponde a credenciales reales ni ejecuta nada.
-- Los **sensores remotos** pueden vivir en servidores que sean comprometidos. Por eso su
-  clave es **de mínimo privilegio** (solo ingestión + control de su propio sensor),
-  **revocable/rotable** en un clic, y la ingestión se trata siempre como **hostil**
-  (validación, rate-limit, dedup, filtrado por prefijo).
-- El canal sensor↔servidor usa **HMAC firmado en ambos sentidos** (incluidas las
-  respuestas de control) + ventana anti-replay, para que un MITM no pueda forjar envíos
-  ni órdenes de apagado. Despliega el servidor tras **TLS**.
-- El modo agentless envía **solo las líneas del cebo** (filtro por prefijo) para no
-  exfiltrar tráfico real de usuarios; usa el **dry-run** antes de activar.
+- The **honeypot is attacked on purpose**. The lure content (AWS/JWT/DB keys,
+  decoy binaries) is **inert**: it does not correspond to real credentials and executes nothing.
+- **Remote sensors** may live on servers that get compromised. That is why their
+  key is **least privilege** (only ingestion + control of its own sensor),
+  **revocable/rotatable** in one click, and ingestion is always treated as **hostile**
+  (validation, rate limiting, dedup, prefix filtering).
+- The sensor<->server channel uses **HMAC signed in both directions** (including the
+  control responses) + an anti-replay window, so a MITM cannot forge deliveries
+  or shutdown orders. Deploy the server behind **TLS**.
+- Agentless mode sends **only the lure lines** (prefix filter) so it does not
+  exfiltrate real user traffic; use the **dry run** before enabling it.
 
-## Uso responsable
+## Responsible use
 
-Despliega sensores únicamente en infraestructura que **estás autorizado** a proteger.
-Aísla la ruta del cebo de las rutas reales y aplica la config de servido seguro incluida
-en cada bundle (sirve el contenido como datos, nunca como código).
+Deploy sensors only on infrastructure you are **authorized** to protect.
+Isolate the lure path from the real paths and apply the safe-serving config included
+in each bundle (it serves the content as data, never as code).

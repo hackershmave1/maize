@@ -35,8 +35,8 @@ export function Alerts() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Alertas</h1>
-        <p className="text-sm text-fg-muted mt-1">Centro de alertas de detección</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Alerts</h1>
+        <p className="text-sm text-fg-muted mt-1">Detection alert center</p>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -48,7 +48,7 @@ export function Alerts() {
               filter === f ? 'bg-accent text-bg' : 'bg-surface-alt text-fg-muted hover:text-fg'
             }`}
           >
-            {f === 'all' ? 'Todas' : f === 'unresolved' ? 'Sin resolver' : f}
+            {f === 'all' ? 'All' : f === 'unresolved' ? 'Unresolved' : f}
           </button>
         ))}
       </div>
@@ -79,7 +79,7 @@ export function Alerts() {
         })}
         {alerts.length === 0 && !loading && (
           <div className="text-center py-12 text-fg-muted">
-            <p className="text-sm">Sin alertas</p>
+            <p className="text-sm">No alerts</p>
           </div>
         )}
       </div>

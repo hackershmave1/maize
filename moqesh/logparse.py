@@ -1,9 +1,9 @@
-"""Parser central de logs de acceso para el modo agentless.
+"""Central access-log parser for agentless mode.
 
-El remoto envía líneas crudas (ya filtradas por el prefijo del cebo) y un hint de
-formato; aquí se extrae `(timestamp, source_ip, method, path, status, size, user_agent)`.
-Soporta combined de nginx/apache, Caddy (JSON) y JSON genérico. Lo que no casa se
-descarta silenciosamente (nunca lanza).
+The remote side sends raw lines (already filtered by the lure prefix) and a format
+hint; here `(timestamp, source_ip, method, path, status, size, user_agent)` is extracted.
+Supports nginx/apache combined, Caddy (JSON) and generic JSON. Anything that does not match is
+silently discarded (it never raises).
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _parse_json(line: str) -> ParsedRequest | None:
         d = json.loads(line)
     except (ValueError, TypeError):
         return None
-    # Soporta esquemas de Caddy y JSON genéricos (claves alternativas).
+    # Supports Caddy and generic JSON schemas (alternative keys).
     req = d.get("request", d)
     ip = req.get("remote_ip") or req.get("client_ip") or d.get("remote_addr") or d.get("ip") or ""
     method = req.get("method") or d.get("method") or "GET"
@@ -103,7 +103,7 @@ def _parse_json(line: str) -> ParsedRequest | None:
 
 
 def parse(fmt: str, lines: list[str], base_path: str = "/") -> list[ParsedRequest]:
-    """Parsea `lines` según `fmt` (nginx|apache|combined|caddy|json|raw) y filtra por prefijo."""
+    """Parse `lines` per `fmt` (nginx|apache|combined|caddy|json|raw) and filter by prefix."""
     fmt = (fmt or "raw").lower()
     out: list[ParsedRequest] = []
     for raw in lines:
@@ -114,7 +114,7 @@ def parse(fmt: str, lines: list[str], base_path: str = "/") -> list[ParsedReques
             pr = _parse_json(raw)
         elif fmt in ("nginx", "apache", "combined"):
             pr = _parse_combined(raw)
-        else:  # raw / autodetección: intenta JSON y luego combined
+        else:  # raw / autodetect: try JSON, then combined
             pr = _parse_json(raw) if raw.startswith("{") else _parse_combined(raw)
         if pr is not None and pr.path.startswith(base_path):
             out.append(pr)

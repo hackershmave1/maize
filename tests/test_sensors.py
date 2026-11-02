@@ -1,4 +1,4 @@
-"""Plano de sensores: alta, ingestión firmada, control firmado y agentless."""
+"""Sensor plane: enrollment, signed ingestion, signed control and agentless."""
 
 import json
 import time
@@ -27,7 +27,7 @@ def test_create_and_agent_ingest_detects():
         key_id, secret = s["keyId"], s["apiSecret"]
         assert f"/s/{s['installToken']}" in s["installCommand"]
 
-        # Un evento con señal fuerte de reuso de credencial → debe puntuar alto.
+        # An event with a strong credential-reuse signal -> must score high.
         events = {
             "events": [
                 {
@@ -48,7 +48,7 @@ def test_create_and_agent_ingest_detects():
         r = client.post("/ingest/events", content=body, headers=headers)
         assert r.status_code == 200 and r.json()["accepted"] == 1
 
-        # El sensor aparece online y con telemetría.
+        # The sensor shows up online and with telemetry.
         sensors = client.get("/api/sensors").json()
         edge = next(x for x in sensors if x["id"] == s["id"])
         assert edge["status"] == "online" and edge["sessionCount"] >= 1
@@ -78,7 +78,7 @@ def test_control_is_signed_by_server():
         assert r.status_code == 200
         ts = r.headers["X-Moqesh-Timestamp"]
         sig = r.headers["X-Moqesh-Server-Signature"]
-        assert security.verify(s["apiSecret"], ts, sig, r.content)  # integridad del control
+        assert security.verify(s["apiSecret"], ts, sig, r.content)  # control integrity
         assert r.json()["enabled"] is True
 
 
@@ -102,5 +102,5 @@ def test_disable_and_decommission():
         s = _create(client, "agent")
         assert client.post(f"/api/sensors/{s['id']}/disable").json()["enabled"] is False
         assert client.delete(f"/api/sensors/{s['id']}").status_code == 204
-        # Tras la baja, ya no aparece en el listado activo.
+        # After removal, it no longer appears in the active listing.
         assert all(x["id"] != s["id"] for x in client.get("/api/sensors").json())

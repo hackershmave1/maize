@@ -1,9 +1,9 @@
-"""Agente remoto de Moqesh.
+"""Moqesh remote agent.
 
-Honeypot autónomo que corre en el borde (servidores de clientes). Se empaqueta como
-binario autocontenido con PyInstaller (ver BUILD.md): NO depende de la DB, FastAPI,
-SQLAlchemy ni pydantic-settings; sólo stdlib + httpx + los módulos puros del laberinto,
-escenarios y seguridad.
+Autonomous honeypot that runs at the edge (customer servers). Packaged as a
+self-contained PyInstaller binary (see BUILD.md): it does NOT depend on the DB, FastAPI,
+SQLAlchemy or pydantic-settings; only the stdlib + httpx + the pure labyrinth,
+scenario and security modules.
 """
 
 from __future__ import annotations

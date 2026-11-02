@@ -1,34 +1,34 @@
-# Generar la plantilla del forge (DLL .NET decompilable)
+# Generating the forge template (decompilable .NET DLL)
 
-El forge (`moqesh/forge.py`) sirve binarios señuelo con credenciales embebidas.
-Para que el señuelo sea un **DLL .NET real y decompilable** (dnSpy/ILSpy) sin
-exigir el SDK de .NET en runtime, se parte de una **plantilla pre-forjada** que
-se genera **una sola vez, offline**, y luego se parchean sus bytes por deployment.
+The forge (`moqesh/forge.py`) serves decoy binaries with embedded credentials.
+To make the decoy a **real, decompilable .NET DLL** (dnSpy/ILSpy) without
+requiring the .NET SDK at runtime, it starts from a **pre-forged template** that
+is generated **once, offline**, and whose bytes are then patched per deployment.
 
-Si la plantilla no está presente, el forge degrada a un binario PE con las
-credenciales embebidas en claro (recuperables con `strings`). Todo sigue
-funcionando; solo se pierde la decompilación "bonita".
+If the template is missing, the forge degrades to a PE binary with the
+credentials embedded in cleartext (recoverable with `strings`). Everything keeps
+working; you only lose the "pretty" decompilation.
 
-## Requisito
+## Requirement
 
-La plantilla DEBE contener estos literales de ancho fijo (el parcheo respeta su
-longitud exacta para no desplazar la metadata del PE):
+The template MUST contain these fixed-width literals (patching respects their
+exact length so the PE metadata does not shift):
 
-| Campo              | Placeholder (ASCII)                 | Longitud |
+| Field              | Placeholder (ASCII)                 | Length   |
 |--------------------|-------------------------------------|----------|
 | connection_string  | `MQCONN__` + `0` × 120              | 128      |
 | internal_api_base  | `MQAPI__` + `0` × 57                | 64       |
 | bearer_token       | `MQBEARER__` + `0` × 118            | 128      |
 
-## Pasos (con el SDK de .NET en una máquina de build)
+## Steps (with the .NET SDK on a build machine)
 
-1. Crear un proyecto de librería:
+1. Create a class library project:
 
    ```bash
    dotnet new classlib -n PortalTemplate -o portal-template
    ```
 
-2. Reemplazar `Class1.cs` por una clase con los placeholders como constantes:
+2. Replace `Class1.cs` with a class that holds the placeholders as constants:
 
    ```csharp
    namespace Portal.Internal
@@ -39,23 +39,23 @@ longitud exacta para no desplazar la metadata del PE):
                "MQCONN__000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
            public const string InternalApiBase =
                "MQAPI__000000000000000000000000000000000000000000000000000";
-           // Token de servicio (en real iría cifrado; aquí como constante para el señuelo).
+           // Service token (in real life it would be encrypted; here it is a constant for the decoy).
            public const string ServiceToken =
                "MQBEARER__000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
        }
    }
    ```
 
-3. Compilar en Release y copiar el DLL a los assets del paquete:
+3. Build in Release and copy the DLL into the package assets:
 
    ```bash
    dotnet build -c Release portal-template
    cp portal-template/bin/Release/*/PortalTemplate.dll moqesh/assets/portal_template.dll
    ```
 
-El forge detecta `moqesh/assets/portal_template.dll` automáticamente. Para usar
-otra ruta, pásala al construir `AssemblyForge(template_path=...)`.
+The forge detects `moqesh/assets/portal_template.dll` automatically. To use
+another path, pass it when constructing `AssemblyForge(template_path=...)`.
 
-> Nota: los placeholders son literales UTF-16 en el heap `#US` del PE; el parcheo
-> busca su codificación UTF-16LE y la sustituye por el valor del deployment
-> (rellenado con base62 determinista hasta la misma longitud).
+> Note: the placeholders are UTF-16 literals in the PE's `#US` heap; patching
+> looks for their UTF-16LE encoding and replaces it with the deployment's value
+> (padded with deterministic base62 to the same length).

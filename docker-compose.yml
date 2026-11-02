@@ -3,15 +3,15 @@ services:
     build: .
     ports:
       - "5000:5000"   # dashboard + API + WebSocket
-      - "8080:8080"   # honeypot (el laberinto servido a los agentes)
+      - "8080:8080"   # honeypot (the labyrinth served to agents)
     volumes:
       - moqesh-data:/app/data
     environment:
       - MOQESH_DB_PATH=/app/data/moqesh.db
       - MOQESH_ENFORCE_BLOCK=true
-      # URL pública a la que se conectarán los sensores remotos (agente/agentless):
+      # Public URL that remote sensors will connect to (agent/agentless):
       # - MOQESH_PUBLIC_URL=https://moqesh.example.com
-      # Confirmación con IA (opcional): descomentar y configurar un endpoint OpenAI-compatible.
+      # AI confirmation (optional): uncomment and configure an OpenAI-compatible endpoint.
       # - MOQESH_AI_ENABLED=true
       # - MOQESH_AI_PROVIDER=openai
       # - MOQESH_AI_BASE_URL=https://openrouter.ai/api/v1

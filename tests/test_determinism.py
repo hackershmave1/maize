@@ -1,4 +1,4 @@
-"""Determinismo y anti-fingerprint del laberinto."""
+"""Labyrinth determinism and anti-fingerprint."""
 
 from moqesh import vocabulary as vocab
 from moqesh.labyrinth import LabyrinthGenerator, LabyrinthOptions, kind_of
@@ -19,7 +19,7 @@ def test_labyrinth_deterministic():
     for path in ["/", "/ops/", "/ops/secrets/.env", "/api/v1/users", "/ops/README.md"]:
         a = gen.generate(opts, path)
         b = gen.generate(opts, path)
-        assert a.body == b.body, f"no determinista en {path}"
+        assert a.body == b.body, f"not deterministic at {path}"
         assert a.content_type == b.content_type
 
 
@@ -30,31 +30,31 @@ def test_labyrinth_anti_fingerprint():
 
 
 def test_dir_tree_navigable_without_name_recursion():
-    # La raíz y los niveles altos son navegables, pero el árbol se afina con la profundidad
-    # (puede terminar como uno real) y NUNCA repite el nombre de un ancestro (/exports/exports/).
+    # The root and upper levels are navigable, but the tree thins out with depth
+    # (it can end like a real one) and NEVER repeats an ancestor's name (/exports/exports/).
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     root_subdirs = [link for link in gen.links_for(opts, "/") if link.endswith("/")]
-    assert root_subdirs, "la raíz debe ser navegable"
+    assert root_subdirs, "the root must be navigable"
     path = root_subdirs[0]
     for _ in range(8):
         segs = [s for s in path.strip("/").split("/")]
-        assert len(segs) == len(set(segs)), f"segmento de ruta repetido (recursión) en {path}"
+        assert len(segs) == len(set(segs)), f"repeated path segment (recursion) in {path}"
         subs = [link for link in gen.links_for(opts, path) if link.endswith("/")]
         if not subs:
-            break  # dead-end realista: aceptable por diseño
+            break  # realistic dead end: acceptable by design
         path = subs[0]
 
 
 def test_unlinked_paths_return_not_reachable():
-    # Un sitio real finito: lo enlazado existe (200), lo sondeado al azar no (404).
+    # A real finite site: what is linked exists (200), what is probed at random does not (404).
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     assert any(gen.is_reachable(opts, link) for link in gen.links_for(opts, "/"))
     for probe in ["/favicon.ico", "/index.php", "/wp-login.php", "/nonexistent-31404-xyz"]:
-        assert not gen.is_reachable(opts, probe), f"{probe} no debería ser alcanzable"
-    # Una colección de API que existe en el deployment SÍ es alcanzable; una inexistente, NO
-    # (antes CUALQUIER /api/... daba 200 -> delator; ahora la API es finita y coherente).
+        assert not gen.is_reachable(opts, probe), f"{probe} should not be reachable"
+    # An API collection that exists in the deployment IS reachable; a nonexistent one is NOT
+    # (previously ANY /api/... returned 200 -> giveaway; now the API is finite and coherent).
     res = vocab.resources(gen.global_ctx(opts).theme)[0]
     assert gen.is_reachable(opts, f"/api/v2/{res}")
     assert not gen.is_reachable(opts, "/api/v2/nonexistent-collection-xyz")
@@ -81,7 +81,7 @@ def test_kind_of_classification():
 
 
 def test_mimic_profile_biases_vocabulary():
-    # Un perfil Mimic debe inyectar su vocabulario en los directorios generados.
+    # A Mimic profile must inject its vocabulary into the generated directories.
     profile = {
         "vocabulary": ["widgets", "tenants"],
         "paths": ["/widgets/", "/billing/"],
@@ -90,5 +90,5 @@ def test_mimic_profile_biases_vocabulary():
     }
     opts = LabyrinthOptions(seed="m1", mode="Mimic", profile=profile)
     gen = LabyrinthGenerator()
-    # El banner del perfil se refleja en el contexto global.
+    # The profile's banner is reflected in the global context.
     assert gen.global_ctx(opts).banner == "cloudflare"

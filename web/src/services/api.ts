@@ -31,7 +31,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   });
-  // 401 fuera del propio flujo de auth = la sesión caducó -> avisa al AuthGate para re-loguear.
+  // 401 outside the auth flow itself = the session expired -> tell the AuthGate to log in again.
   if (res.status === 401 && !path.startsWith('/auth/')) {
     window.dispatchEvent(new CustomEvent('moqesh:unauthorized'));
   }
@@ -159,7 +159,7 @@ export const api = {
       request<{ id: number; seed: string }>(`/sensors/${id}/rotate-seed`, { method: 'POST' }),
     rotateKey: (id: number) =>
       request<SensorCreated>(`/sensors/${id}/rotate-key`, { method: 'POST' }),
-    // Dar de baja: el backend responde 204 sin cuerpo, por lo que no se parsea JSON.
+    // Decommission: the backend answers 204 with no body, so no JSON is parsed.
     remove: async (id: number): Promise<void> => {
       const res = await fetch(`${API_BASE}/sensors/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -171,9 +171,9 @@ export const api = {
   },
 };
 
-// Enlaces de descarga directos (fuera de /api).
+// Direct download links (outside /api).
 export const downloads = {
-  // El filename del bundle llega con extensión; la ruta la espera SIN extensión.
+  // The bundle filename arrives with an extension; the route expects it WITHOUT one.
   bundle: (filename: string) =>
     `/download/bundle/${filename.replace(/\.(tar\.gz|tgz|zip)$/i, '')}`,
   shipper: (sensorId: number) => `/download/shipper/${sensorId}`,

@@ -4,8 +4,8 @@
 ![CI](https://github.com/juliourena/moqesh/actions/workflows/ci.yml/badge.svg)
 
 An open-source honeypot against **autonomous AI agents** that scan your
-infrastructure. Moqesh serves a **Token Exhaust labyrinth** — an infinite,
-coherent maze of believable content — that traps automated agents, **drains
+infrastructure. Moqesh serves a **Token Exhaust labyrinth** (an infinite,
+coherent maze of believable content) that traps automated agents, **drains
 their LLM's tokens**, profiles their behavior, and lets you detect and
 block them. A native **Python** project (FastAPI + SQLAlchemy).
 
@@ -14,17 +14,17 @@ block them. A native **Python** project (FastAPI + SQLAlchemy).
 
 ## How it works
 
-1. **Lure** — serves a fake internal portal: directory listings, `.env` files,
+1. **Lure**: serves a fake internal portal with directory listings, `.env` files,
    configs, READMEs, APIs, and decoy binaries.
-2. **Trap** — every page links deeper: listings never end, APIs paginate
+2. **Trap**: every page links deeper. Listings never end, APIs paginate
    forever, READMEs point to "juicy" files, and JS bundles hide endpoints. An
    agent that *follows everything* navigates indefinitely.
-3. **Detect** — every request is scored by a **behavioral rules** engine
+3. **Detect**: every request is scored by a **behavioral rules** engine
    (timing regularity, depth descent, exhaustive fan-out, breadcrumb/README
    following, JS deobfuscation, AI-crawler UAs…). Crossing the threshold raises an alert.
-4. **Confirm (optional)** — an LLM module reviews gray-zone sessions and
+4. **Confirm (optional)**: an LLM module reviews gray-zone sessions and
    confirms whether the visitor is an agent. The system works **without** this module.
-5. **Block** — reuse of a planted credential (honeytoken) or a score above the
+5. **Block**: reuse of a planted credential (honeytoken) or a score above the
    threshold actively blocks the IP (403) and can notify via webhook.
 
 All content is **deterministic per `(seed, path)`**: the same URL always returns
@@ -33,9 +33,9 @@ deployments with different seeds share no static signature (anti-fingerprint).
 
 ## Generation modes
 
-- **Template** — generic vocabulary mutated by seed (zero-config, works against any target).
-- **Mimic** — profiles a real site (`TargetUrl`, read-only crawl) and generates content that blends in with it.
-- **Static** — disables the procedural labyrinth.
+- **Template**: generic vocabulary mutated by seed (zero-config, works against any target).
+- **Mimic**: profiles a real site (`TargetUrl`, read-only crawl) and generates content that blends in with it.
+- **Static**: disables the procedural labyrinth.
 
 ## CTF scenarios
 
@@ -49,7 +49,7 @@ importable/exportable as JSON from the dashboard.
 
 The primary content source is the **World**: a tree of real, **inert** files
 (several portals under different prefixes, with mock data) that the honeypot serves **only as
-bytes — it never executes anything**. It replaces the generated labyrinth (which becomes *legacy*,
+bytes; it never executes anything**. It replaces the generated labyrinth (which becomes *legacy*,
 OFF when a World is present) and removes the structural artifacts that gave the honeypot away.
 
 For **large-scale token burning without the giveaway of generated content**, a World
@@ -97,9 +97,9 @@ Configuration via environment (`MOQESH_` prefix): see [`.env.example`](.env.exam
 
 Moqesh can protect servers it does **not** live on, via *sensors*:
 
-- **Agent** — a self-contained binary that runs the full engine on the remote
+- **Agent**: a self-contained binary that runs the full engine on the remote
   server (infinite labyrinth, credential/CTF gates) and sends signed telemetry.
-- **Agentless** — static ZIPs (randomized, patternless) that you unzip wherever
+- **Agentless**: static ZIPs (randomized, patternless) that you unzip wherever
   you like + a scheduled task that ships the logs; no software to install.
 
 One-command enrollment from the dashboard (with live connection verification),
@@ -110,7 +110,7 @@ Full guide: [`docs/SENSORS.md`](docs/SENSORS.md).
 
 ```
 moqesh/
-  rng.py          deterministic RNG per (seed,path) — anti-fingerprint primitive
+  rng.py          deterministic RNG per (seed,path); anti-fingerprint primitive
   vocabulary.py   vocabulary pools by theme
   labyrinth.py    Token Exhaust generator (legacy: OFF when a World is active)
   world.py        inert World: serves ONLY bytes of real multi-portal files (primary source)
@@ -130,7 +130,7 @@ moqesh/
   provisioning.py install scripts/instructions (1-command onboarding)
   logparse.py     agentless log parser (nginx/apache/caddy/json)
   bundles.py      random static ZIP generator (agentless mode)
-  honeypot.py     local trap server (:8080) — the `local` sensor
+  honeypot.py     local trap server (:8080); the `local` sensor
   agent/          self-contained remote agent (PyInstaller binary)
   clients/        agentless shipping script (sh + PowerShell)
   api/            dashboard + REST API + sensor ingestion/control (:5000)
@@ -171,7 +171,7 @@ Contributing: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-**AGPL-3.0-or-later** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). © 2026 Julio Ureña.
+**AGPL-3.0-or-later**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). © 2026 Julio Ureña.
 
 Strong copyleft with a network clause: you may use, modify, and offer Moqesh (even
 commercially), but if you distribute a modified version **or offer it as a network

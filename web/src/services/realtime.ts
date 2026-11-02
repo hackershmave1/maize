@@ -1,6 +1,6 @@
-// Cliente de tiempo real con WebSocket NATIVO (reemplazo de SignalR).
-// Se conecta a /hubs/stream (proxyeado a la API en dev, mismo origen en prod)
-// y reconecta solo si la conexión se cae.
+// Real-time client over NATIVE WebSocket (replacing SignalR).
+// Connects to /hubs/stream (proxied to the API in dev, same origin in prod)
+// and reconnects on its own if the connection drops.
 
 export interface LiveEvent {
   event: string;
@@ -20,7 +20,7 @@ export function connectLive(onEvent: (e: LiveEvent) => void): () => void {
       try {
         onEvent(JSON.parse(m.data) as LiveEvent);
       } catch {
-        /* mensaje no-JSON: ignorar */
+        /* non-JSON message: ignore */
       }
     };
     ws.onclose = () => {

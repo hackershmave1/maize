@@ -1,5 +1,5 @@
-// Intensidad adaptativa derivada del score de la sesión — MISMOS umbrales que el backend
-// (moqesh/detection.py intensity_for). 0 = sitio real finito (sigilo); 1..3 = cebo + tarpit.
+// Adaptive intensity derived from the session score: the SAME thresholds as the backend
+// (moqesh/detection.py intensity_for). 0 = real finite site (stealth); 1..3 = lure + tarpit.
 
 export function intensityFromScore(score: number): number {
   if (score >= 0.8) return 3;
@@ -8,13 +8,13 @@ export function intensityFromScore(score: number): number {
   return 0;
 }
 
-export const INTENSITY_LABELS = ['Pasivo', 'Vigilado', 'Cebo', 'Tarpit'] as const;
+export const INTENSITY_LABELS = ['Passive', 'Watched', 'Lure', 'Tarpit'] as const;
 
 export const INTENSITY_HINTS = [
-  'Sitio real finito — máximo sigilo',
-  'Sospecha leve — vocabulario coherente',
-  'Cebo denso coherente — más que leer',
-  'Tarpit — retardo creciente que quema tokens',
+  'Real finite site: max stealth',
+  'Mild suspicion: coherent vocabulary',
+  'Dense coherent lure: more to read',
+  'Tarpit: growing delay that burns tokens',
 ] as const;
 
 export function intensityBadge(level: number): string {

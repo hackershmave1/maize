@@ -1,4 +1,4 @@
-"""Router de sesiones: listado, detalle (con progreso CTF) y requests."""
+"""Sessions router: list, detail (with CTF progress) and requests."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def list_sessions(
 def get_session_detail(session_id: int, db: Session = Depends(get_session)) -> SessionDetailDto:
     s = db.get(AgentSession, session_id)
     if s is None:
-        raise HTTPException(status_code=404, detail="sesión no encontrada")
+        raise HTTPException(status_code=404, detail="session not found")
     reqs = db.scalars(
         select(RequestLog).where(RequestLog.session_id == session_id).order_by(RequestLog.timestamp)
     ).all()

@@ -1,44 +1,44 @@
 <#
-  moqesh-ship.ps1 - Shipper agentless de Moqesh (PowerShell 5+).
+  moqesh-ship.ps1 - Moqesh agentless shipper (PowerShell 5+).
 
-  Corre por Tarea Programada en el servidor del cliente. Lee el access log del
-  web server, se queda SOLO con las lineas que casan el prefijo del cebo
-  (privacidad: el trafico real de usuarios nunca sale del host) y las envia
-  firmadas con HMAC al servidor Moqesh. No instala software pesado.
+  Runs as a Scheduled Task on the customer's server. Reads the web server's
+  access log, keeps ONLY the lines that match the lure prefix
+  (privacy: real user traffic never leaves the host) and sends them
+  HMAC-signed to the Moqesh server. Installs no heavy software.
 
-  Idempotente: guarda un byte-offset del log; el servidor ademas deduplica.
-  NUNCA modifica ni borra el log de origen.
+  Idempotent: stores a byte offset into the log; the server also deduplicates.
+  NEVER modifies or deletes the source log.
 
-  Variables de entorno (ver moqesh/clients/README.md):
-    MOQESH_SERVER     URL base del servidor Moqesh         (requerida)
-    MOQESH_KEY_ID     identificador de clave del sensor    (requerida)
-    MOQESH_SECRET     secreto HMAC del sensor              (requerida)
-    MOQESH_LOG        ruta del access log                  (requerida)
-    MOQESH_BASE_PATH  prefijo del cebo, p.ej. /lure         (requerida)
-    MOQESH_FORMAT     nginx|apache|caddy|json|raw          (def. nginx)
-    MOQESH_STATE      fichero de offset                    (def. junto al script)
-    MOQESH_DRY_RUN    1 = imprime lo que enviaria y sale   (def. vacio)
+  Environment variables (see moqesh/clients/README.md):
+    MOQESH_SERVER     base URL of the Moqesh server          (required)
+    MOQESH_KEY_ID     the sensor's key identifier            (required)
+    MOQESH_SECRET     the sensor's HMAC secret               (required)
+    MOQESH_LOG        path to the access log                 (required)
+    MOQESH_BASE_PATH  lure prefix, e.g. /lure                (required)
+    MOQESH_FORMAT     nginx|apache|caddy|json|raw            (default nginx)
+    MOQESH_STATE      offset file                            (default: next to the script)
+    MOQESH_DRY_RUN    1 = print what would be sent and exit  (default empty)
 
-  Decision documentada: si /control devuelve enabled=false, NO se envia y NO se
-  avanza el offset, para no perder lineas del cebo al reactivar el sensor.
+  Documented decision: if /control returns enabled=false, nothing is sent and the
+  offset is NOT advanced, so lure lines are not lost when the sensor is re-enabled.
 #>
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-# TLS 1.2 para HTTPS en Windows antiguos.
+# TLS 1.2 for HTTPS on older Windows versions.
 try {
   [System.Net.ServicePointManager]::SecurityProtocol = `
     [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 } catch { }
 
-$CAP = 20000  # tope de lineas por envio (el servidor tambien capa a 20000)
+$CAP = 20000  # cap on lines per send (the server also caps at 20000)
 
 function Die([string]$msg) { [Console]::Error.WriteLine("moqesh-ship: $msg"); exit 1 }
 function Info([string]$msg) { Write-Host "moqesh-ship: $msg" }
 
 # ---------------------------------------------------------------------------
-# 1. Entorno y validacion
+# 1. Environment and validation
 # ---------------------------------------------------------------------------
 $server   = $env:MOQESH_SERVER
 $keyId    = $env:MOQESH_KEY_ID
@@ -48,16 +48,16 @@ $basePath = $env:MOQESH_BASE_PATH
 $fmt      = $env:MOQESH_FORMAT; if ([string]::IsNullOrEmpty($fmt)) { $fmt = 'nginx' }
 $dryRun   = ($env:MOQESH_DRY_RUN -eq '1')
 
-if ([string]::IsNullOrEmpty($server))   { Die 'falta MOQESH_SERVER' }
-if ([string]::IsNullOrEmpty($keyId))    { Die 'falta MOQESH_KEY_ID' }
-if ([string]::IsNullOrEmpty($secret))   { Die 'falta MOQESH_SECRET' }
-if ([string]::IsNullOrEmpty($log))      { Die 'falta MOQESH_LOG' }
-# Prefijo vacio = se enviaria TODO el trafico -> prohibido por privacidad.
-if ([string]::IsNullOrEmpty($basePath)) { Die 'falta MOQESH_BASE_PATH (sin prefijo se enviaria trafico real)' }
+if ([string]::IsNullOrEmpty($server))   { Die 'MOQESH_SERVER is missing' }
+if ([string]::IsNullOrEmpty($keyId))    { Die 'MOQESH_KEY_ID is missing' }
+if ([string]::IsNullOrEmpty($secret))   { Die 'MOQESH_SECRET is missing' }
+if ([string]::IsNullOrEmpty($log))      { Die 'MOQESH_LOG is missing' }
+# Empty prefix = ALL traffic would be sent -> forbidden for privacy.
+if ([string]::IsNullOrEmpty($basePath)) { Die 'MOQESH_BASE_PATH is missing (without a prefix, real traffic would be sent)' }
 
-$server = $server.TrimEnd('/')  # sin barra final -> evita //control
+$server = $server.TrimEnd('/')  # no trailing slash -> avoids //control
 
-# Estado por defecto: unico por ruta de log.
+# Default state: unique per log path.
 $state = $env:MOQESH_STATE
 if ([string]::IsNullOrEmpty($state)) {
   $selfDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -70,16 +70,16 @@ if ([string]::IsNullOrEmpty($state)) {
 $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($secret)
 
 # ---------------------------------------------------------------------------
-# Helpers de firma
+# Signing helpers
 # ---------------------------------------------------------------------------
 
-# Timestamp unix con decimales, cultura invariante (siempre punto).
+# Unix timestamp with decimals, invariant culture (always a dot).
 function Get-MoqeshTs {
   $ms = [System.DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   return ($ms / 1000.0).ToString('F3', [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
-# "sha256=<hex>" sobre  ts + "." + body   (identico a moqesh.security.sign).
+# "sha256=<hex>" over  ts + "." + body   (identical to moqesh.security.sign).
 function Get-MoqeshSignature([string]$ts, [byte[]]$bodyBytes) {
   $prefix = [System.Text.Encoding]::UTF8.GetBytes($ts + '.')
   $msg = New-Object byte[] ($prefix.Length + $bodyBytes.Length)
@@ -94,7 +94,7 @@ function Get-MoqeshSignature([string]$ts, [byte[]]$bodyBytes) {
   return 'sha256=' + $hex
 }
 
-# Escapa una cadena como literal JSON (comillas incluidas).
+# Escape a string as a JSON literal (quotes included).
 function ConvertTo-JsonLiteral([string]$s) {
   $sb = New-Object System.Text.StringBuilder
   [void]$sb.Append([char]34)
@@ -120,14 +120,14 @@ function Write-Offset([long]$value) {
     [System.IO.File]::WriteAllText($tmp, [string]$value, [System.Text.Encoding]::ASCII)
     Move-Item -LiteralPath $tmp -Destination $state -Force
   } catch {
-    Die "no se pudo escribir el estado en $state (permisos del directorio?)"
+    Die "could not write the state to $state (directory permissions?)"
   }
 }
 
 # ---------------------------------------------------------------------------
-# 2. Offset + rotacion
+# 2. Offset + rotation
 # ---------------------------------------------------------------------------
-if (-not (Test-Path -LiteralPath $log)) { Die "el log no existe: $log" }
+if (-not (Test-Path -LiteralPath $log)) { Die "the log does not exist: $log" }
 
 $curSize = (Get-Item -LiteralPath $log).Length
 
@@ -139,18 +139,18 @@ if (Test-Path -LiteralPath $state) {
   } catch { $offset = 0L }
 }
 
-# Rotacion / truncado: el log encogio -> empezar desde cero.
+# Rotation / truncation: the log shrank -> start from zero.
 if ($curSize -lt $offset) {
-  Info "rotacion detectada ($curSize < $offset); reiniciando offset a 0"
+  Info "rotation detected ($curSize < $offset); resetting offset to 0"
   $offset = 0L
 }
 
 if ($curSize -eq $offset) {
-  Info "sin lineas nuevas (offset $offset)"
+  Info "no new lines (offset $offset)"
   exit 0
 }
 
-# Lee solo lo nuevo desde el offset, con sharing ReadWrite (no bloquea al web server).
+# Read only what is new since the offset, with ReadWrite sharing (does not block the web server).
 $count = [int]($curSize - $offset)
 $buf = New-Object byte[] $count
 $fs = $null
@@ -165,14 +165,14 @@ try {
     $readTotal += $n
   }
 } catch {
-  Die "no se pudo leer $log (permisos?): $($_.Exception.Message)"
+  Die "could not read $log (permissions?): $($_.Exception.Message)"
 } finally {
   if ($fs) { $fs.Close() }
 }
 
 # ---------------------------------------------------------------------------
-# 3. Lineas completas (ultima sin '\n' queda pendiente) + filtrado por prefijo.
-#    consumed = bytes de TODAS las lineas completas; solo las del cebo se envian.
+# 3. Complete lines (the last one without '\n' stays pending) + prefix filtering.
+#    consumed = bytes of ALL complete lines; only the lure lines are sent.
 # ---------------------------------------------------------------------------
 $lastNl = -1
 for ($i = $readTotal - 1; $i -ge 0; $i--) { if ($buf[$i] -eq 10) { $lastNl = $i; break } }
@@ -185,27 +185,27 @@ if ($lastNl -ge 0) {
   foreach ($line in ($text -split "`n")) {
     $clean = $line.TrimEnd("`r")
     if ($clean.Length -eq 0) { continue }
-    if ($clean.Contains($basePath)) { $matched.Add($clean) }  # solo lineas del cebo
+    if ($clean.Contains($basePath)) { $matched.Add($clean) }  # lure lines only
   }
 }
 $newoffset = $offset + $consumed
 $cnt = $matched.Count
 
-# Sin lineas del cebo: avanza el offset (era trafico real) y termina.
+# No lure lines: advance the offset (it was real traffic) and exit.
 if ($cnt -eq 0) {
   if ($dryRun) {
-    Info "[dry-run] $consumed bytes nuevos, 0 lineas del cebo; nada que enviar (offset $offset -> $newoffset)"
+    Info "[dry-run] $consumed new bytes, 0 lure lines; nothing to send (offset $offset -> $newoffset)"
     exit 0
   }
   Write-Offset $newoffset
-  Info "0 lineas del cebo; offset $offset -> $newoffset"
+  Info "0 lure lines; offset $offset -> $newoffset"
   exit 0
 }
 
 $fmtLit  = ConvertTo-JsonLiteral $fmt
 $baseLit = ConvertTo-JsonLiteral $basePath
 
-# Divide en lotes de hasta CAP lineas y arma cada cuerpo JSON.
+# Split into batches of up to CAP lines and build each JSON body.
 function Build-Body([System.Collections.Generic.List[string]]$lines, [int]$start, [int]$len) {
   $parts = New-Object System.Collections.Generic.List[string]
   for ($j = $start; $j -lt ($start + $len); $j++) { $parts.Add((ConvertTo-JsonLiteral $lines[$j])) }
@@ -222,18 +222,18 @@ while ($pos -lt $cnt) {
 }
 
 # ---------------------------------------------------------------------------
-# 6. DRY-RUN: imprime lo que enviaria y sale (sin red, sin avanzar offset).
+# 6. DRY-RUN: print what would be sent and exit (no network, no offset advance).
 # ---------------------------------------------------------------------------
 if ($dryRun) {
-  Info "[dry-run] servidor=$server formato=$fmt prefijo=$basePath"
-  Info "[dry-run] offset $offset -> $newoffset ; $cnt lineas del cebo (NO se avanza el offset)"
-  Info "[dry-run] se omite /control; a continuacion los cuerpos que se enviarian:"
+  Info "[dry-run] server=$server format=$fmt prefix=$basePath"
+  Info "[dry-run] offset $offset -> $newoffset ; $cnt lure lines (the offset is NOT advanced)"
+  Info "[dry-run] skipping /control; below are the bodies that would be sent:"
   for ($b = 0; $b -lt $batches.Count; $b++) {
     $body = $batches[$b]
     $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
     $ts = Get-MoqeshTs
     $sig = Get-MoqeshSignature $ts $bodyBytes
-    Write-Host ("--- lote {0} -> POST {1}/ingest/logs ---" -f ($b + 1), $server)
+    Write-Host ("--- batch {0} -> POST {1}/ingest/logs ---" -f ($b + 1), $server)
     Write-Host ("X-Moqesh-Key-Id: {0}" -f $keyId)
     Write-Host ("X-Moqesh-Timestamp: {0}" -f $ts)
     Write-Host ("X-Moqesh-Signature: {0}" -f $sig)
@@ -243,10 +243,10 @@ if ($dryRun) {
 }
 
 # ---------------------------------------------------------------------------
-# 4. GET /control (firmado) + verificacion de la firma del servidor.
+# 4. GET /control (signed) + verification of the server's signature.
 # ---------------------------------------------------------------------------
 $ts = Get-MoqeshTs
-$sig = Get-MoqeshSignature $ts (New-Object byte[] 0)  # cuerpo vacio
+$sig = Get-MoqeshSignature $ts (New-Object byte[] 0)  # empty body
 $ctrlHeaders = @{
   'X-Moqesh-Key-Id'    = $keyId
   'X-Moqesh-Timestamp' = $ts
@@ -255,11 +255,11 @@ $ctrlHeaders = @{
 try {
   $resp = Invoke-WebRequest -Uri "$server/control" -Method Get -Headers $ctrlHeaders -UseBasicParsing
 } catch {
-  Die "no se pudo conectar a $server/control: $($_.Exception.Message)"
+  Die "could not connect to $server/control: $($_.Exception.Message)"
 }
-if ([int]$resp.StatusCode -ne 200) { Die "/control devolvio HTTP $($resp.StatusCode)" }
+if ([int]$resp.StatusCode -ne 200) { Die "/control returned HTTP $($resp.StatusCode)" }
 
-# Bytes exactos del cuerpo para re-firmar.
+# Exact body bytes, for re-signing.
 $respBytes = $null
 try {
   $ms = New-Object System.IO.MemoryStream
@@ -271,22 +271,22 @@ try {
 
 $srvTs  = @($resp.Headers['X-Moqesh-Timestamp'])[0]
 $srvSig = @($resp.Headers['X-Moqesh-Server-Signature'])[0]
-if ([string]::IsNullOrEmpty($srvSig)) { Die '/control sin X-Moqesh-Server-Signature' }
+if ([string]::IsNullOrEmpty($srvSig)) { Die '/control without X-Moqesh-Server-Signature' }
 
 $calc = Get-MoqeshSignature $srvTs $respBytes
-if ($calc -ne $srvSig) { Die 'firma del servidor INVALIDA (posible MITM); no se envia' }
+if ($calc -ne $srvSig) { Die 'INVALID server signature (possible MITM); not sending' }
 
 $respText = [System.Text.Encoding]::UTF8.GetString($respBytes)
 $enabled = $false
 if ($respText -match '"enabled"\s*:\s*(true|false)') { $enabled = ($matches[1] -eq 'true') }
 if (-not $enabled) {
-  # DECISION: disabled -> no enviar y NO avanzar offset (no perder lineas del cebo).
-  Info "sensor deshabilitado (enabled=false); no se envia ni se avanza el offset ($cnt lineas en espera)"
+  # DECISION: disabled -> do not send and do NOT advance the offset (do not lose lure lines).
+  Info "sensor disabled (enabled=false); not sending or advancing the offset ($cnt lines waiting)"
   exit 0
 }
 
 # ---------------------------------------------------------------------------
-# 5. POST /ingest/logs por lotes (firmado). Offset solo tras exito total.
+# 5. POST /ingest/logs in batches (signed). Offset only after full success.
 # ---------------------------------------------------------------------------
 $sent = 0
 for ($b = 0; $b -lt $batches.Count; $b++) {
@@ -303,15 +303,15 @@ for ($b = 0; $b -lt $batches.Count; $b++) {
     $r = Invoke-WebRequest -Uri "$server/ingest/logs" -Method Post -Headers $headers `
          -ContentType 'application/json' -Body $bodyBytes -UseBasicParsing
   } catch {
-    Die "fallo enviando el lote $($b + 1) (offset sin avanzar): $($_.Exception.Message)"
+    Die "failed sending batch $($b + 1) (offset not advanced): $($_.Exception.Message)"
   }
   if ([int]$r.StatusCode -lt 200 -or [int]$r.StatusCode -ge 300) {
-    Die "ingest devolvio HTTP $($r.StatusCode) en el lote $($b + 1) (offset sin avanzar)"
+    Die "ingest returned HTTP $($r.StatusCode) in batch $($b + 1) (offset not advanced)"
   }
   $sent++
 }
 
-# Todos los lotes OK -> ahora si avanzamos el offset.
+# All batches OK -> now we advance the offset.
 Write-Offset $newoffset
-Info "enviados $cnt lineas del cebo en $sent lote(s); offset $offset -> $newoffset"
+Info "sent $cnt lure lines in $sent batch(es); offset $offset -> $newoffset"
 exit 0

@@ -1,19 +1,19 @@
-"""Agente remoto de Moqesh — honeypot de borde con control firmado y envío por lotes.
+"""Moqesh remote agent: an edge honeypot with signed control and batched delivery.
 
-Arquitectura (todo en memoria, sin DB):
-  * Servidor HTTP local (`ThreadingHTTPServer` de la stdlib) que sirve el laberinto
-    procedural y el escenario CTF activo, exactamente como el honeypot central.
-  * Hilo de control: consulta `GET /control` con auth HMAC, VERIFICA la firma del
-    servidor en la respuesta y aplica el estado deseado (enabled/seed/scenario).
-  * Estado por IP en memoria para calcular las 4 señales fuertes acumulativas
-    (misma lógica que `honeypot.scenario_progress_signals`, pero sin SQLAlchemy).
-  * Hilo de envío: encola eventos y los manda por lotes a `POST /ingest/events`
-    firmados, con jitter y buffer de reintento (no pierde eventos ante caídas de red).
+Architecture (all in memory, no DB):
+  * Local HTTP server (the stdlib's `ThreadingHTTPServer`) that serves the procedural
+    labyrinth and the active CTF scenario, exactly like the central honeypot.
+  * Control thread: polls `GET /control` with HMAC auth, VERIFIES the server's
+    signature on the response and applies the desired state (enabled/seed/scenario).
+  * Per-IP in-memory state to compute the 4 cumulative strong signals
+    (same logic as `honeypot.scenario_progress_signals`, but without SQLAlchemy).
+  * Delivery thread: queues events and sends them in signed batches to `POST /ingest/events`,
+    with jitter and a retry buffer (no events lost on network outages).
 
-Contrato con el servidor (fijo; ver `moqesh/api/node.py`):
-  - Auth en cada request: `X-Moqesh-Key-Id`, `X-Moqesh-Timestamp` (= str(time.time())),
-    `X-Moqesh-Signature` = `security.sign(secret, ts, body)`. Para GET /control body = b"".
-  - La respuesta de /control se valida con `security.verify(secret, ts, server_sig, body)`.
+Contract with the server (fixed; see `moqesh/api/node.py`):
+  - Auth on every request: `X-Moqesh-Key-Id`, `X-Moqesh-Timestamp` (= str(time.time())),
+    `X-Moqesh-Signature` = `security.sign(secret, ts, body)`. For GET /control body = b"".
+  - The /control response is validated with `security.verify(secret, ts, server_sig, body)`.
 """
 
 from __future__ import annotations
@@ -49,12 +49,12 @@ _DEFAULT_SEED = "default-seed"
 logger = logging.getLogger("moqesh.agent")
 
 
-# ----------------------------- configuración --------------------------------
+# ----------------------------- configuration --------------------------------
 
 
 @dataclass
 class AgentConfig:
-    """Config del agente leída del entorno (NO usa `moqesh.config`/pydantic-settings)."""
+    """Agent config read from the environment (does NOT use `moqesh.config`/pydantic-settings)."""
 
     server: str
     key_id: str
@@ -72,7 +72,7 @@ class AgentConfig:
         required = (("MOQESH_SERVER", server), ("MOQESH_KEY_ID", key_id), ("MOQESH_SECRET", secret))
         missing = [name for name, value in required if not value]
         if missing:
-            raise ValueError("faltan variables de entorno obligatorias: " + ", ".join(missing))
+            raise ValueError("missing required environment variables: " + ", ".join(missing))
         return cls(
             server=server,
             key_id=key_id,
@@ -83,12 +83,12 @@ class AgentConfig:
         )
 
 
-# ----------------------------- señales fuertes (puro, testable) --------------
+# ----------------------------- strong signals (pure, testable) ---------------
 
 
 @dataclass
 class IpProgress:
-    """Progreso acumulado por IP (espejo en memoria de `SessionProgress`)."""
+    """Cumulative per-IP progress (in-memory mirror of `SessionProgress`)."""
 
     scenario_id: int = 0
     hidden_hits: int = 0
@@ -97,14 +97,14 @@ class IpProgress:
     decompile_follow: bool = False
     credentials_used: set[str] = field(default_factory=set)
     credentials_obtained: set[str] = field(default_factory=set)
-    paths: list[str] = field(default_factory=list)  # historial ordenado de rutas
+    paths: list[str] = field(default_factory=list)  # ordered path history
 
 
 def update_progress(prog: IpProgress, scenario: ScenarioData, hit: ScenarioResult, path: str) -> dict[str, bool]:
-    """Aplica el `hit` del escenario al progreso en memoria y devuelve las 4 señales fuertes.
+    """Apply the scenario `hit` to the in-memory progress and return the 4 strong signals.
 
-    Réplica exacta de `honeypot.scenario_progress_signals` sin DB: el `ordered` de allí es
-    aquí `prog.paths` (la ruta actual ya incluida, igual que el RequestLog recién insertado).
+    Exact replica of `honeypot.scenario_progress_signals` without a DB: the `ordered` there is
+    `prog.paths` here (the current path already included, same as the freshly inserted RequestLog).
     """
     prog.paths.append(path)
     if hit.is_hidden:
@@ -138,7 +138,7 @@ def update_progress(prog: IpProgress, scenario: ScenarioData, hit: ScenarioResul
 
 
 def progress_facts(prog: IpProgress) -> dict:
-    """Snapshot acumulado de progreso para el payload del evento (CSV ordenado, determinista)."""
+    """Cumulative progress snapshot for the event payload (sorted CSV, deterministic)."""
     return {
         "stage_reached": prog.stage_reached,
         "credentials_obtained": ",".join(sorted(prog.credentials_obtained)),
@@ -165,7 +165,7 @@ def build_event(
     strong: dict[str, bool],
     progress: dict | None,
 ) -> dict:
-    """Construye el evento según el contrato de `POST /ingest/events`."""
+    """Build the event according to the `POST /ingest/events` contract."""
     ev: dict = {
         "source_ip": source_ip,
         "method": method,
@@ -186,11 +186,11 @@ def build_event(
     return ev
 
 
-# ----------------------------- reconstrucción del escenario ------------------
+# ----------------------------- scenario reconstruction -----------------------
 
 
 def build_scenario(pack: dict, scenario_id: int) -> ScenarioData:
-    """Reconstruye `ScenarioData` desde el pack dict (camelCase → snake_case)."""
+    """Rebuild `ScenarioData` from the pack dict (camelCase -> snake_case)."""
     nodes = [
         ScNode(
             id=i,
@@ -222,11 +222,11 @@ def build_scenario(pack: dict, scenario_id: int) -> ScenarioData:
     return ScenarioData(scenario_id=scenario_id, name=pack.get("name", ""), nodes=nodes, credentials=creds)
 
 
-# ----------------------------- cliente del servidor (httpx) ------------------
+# ----------------------------- server client (httpx) ------------------------
 
 
 class ServerClient:
-    """Cliente HMAC hacia el servidor central (healthz / control / ingest)."""
+    """HMAC client to the central server (healthz / control / ingest)."""
 
     def __init__(self, server: str, key_id: str, secret: str, *, timeout: float = 10.0) -> None:
         self._base = server.rstrip("/")
@@ -246,59 +246,59 @@ class ServerClient:
         try:
             return self._client.get(f"{self._base}/healthz").status_code == 200
         except httpx.HTTPError as exc:
-            logger.warning("healthz: error de red: %s", exc)
+            logger.warning("healthz: network error: %s", exc)
             return False
 
     def get_control(self) -> dict | None:
-        """Devuelve el payload de control sólo si la firma del servidor es válida."""
+        """Return the control payload only if the server's signature is valid."""
         try:
             r = self._client.get(f"{self._base}/control", headers=self._auth_headers(b""))
         except httpx.HTTPError as exc:
-            logger.warning("control: error de red: %s", exc)
+            logger.warning("control: network error: %s", exc)
             return None
         if r.status_code != 200:
-            logger.warning("control: respuesta HTTP %s", r.status_code)
+            logger.warning("control: HTTP response %s", r.status_code)
             return None
         ts = r.headers.get("X-Moqesh-Timestamp", "")
         sig = r.headers.get("X-Moqesh-Server-Signature", "")
         if not security.verify(self._secret, ts, sig, r.content):
-            logger.error("control: firma del servidor INVÁLIDA; se ignora la respuesta")
+            logger.error("control: INVALID server signature; ignoring the response")
             return None
         try:
             return r.json()
         except ValueError:
-            logger.error("control: JSON inválido")
+            logger.error("control: invalid JSON")
             return None
 
     def post_events(self, events: list[dict]) -> bool:
-        """Envía un lote firmado. Devuelve False ante cualquier fallo (el llamador reintenta)."""
+        """Send a signed batch. Returns False on any failure (the caller retries)."""
         body = json.dumps({"agent_version": AGENT_VERSION, "events": events}).encode()
         try:
             r = self._client.post(f"{self._base}/ingest/events", content=body, headers=self._auth_headers(body))
         except httpx.HTTPError as exc:
-            logger.warning("ingest: error de red (%d eventos retenidos): %s", len(events), exc)
+            logger.warning("ingest: network error (%d events held): %s", len(events), exc)
             return False
         if r.status_code == 200:
             return True
-        logger.warning("ingest: respuesta HTTP %s (%d eventos retenidos)", r.status_code, len(events))
+        logger.warning("ingest: HTTP response %s (%d events held)", r.status_code, len(events))
         return False
 
     def close(self) -> None:
         self._client.close()
 
 
-# ----------------------------- hilos de fondo --------------------------------
+# ----------------------------- background threads ---------------------------
 
 
 def _jittered(interval: float, jitter: float) -> float:
-    """Intervalo con jitter simétrico (±jitter) para difuminar el patrón de beacon."""
+    """Interval with symmetric jitter (±jitter) to blur the beacon pattern."""
     if jitter <= 0:
         return max(0.0, interval)
     return max(0.0, interval * (1.0 + random.uniform(-jitter, jitter)))
 
 
 class ControlLoop(threading.Thread):
-    """Consulta /control periódicamente y aplica el estado al agente."""
+    """Poll /control periodically and apply the state to the agent."""
 
     def __init__(self, agent: Agent, client: ServerClient, interval: float, jitter: float) -> None:
         super().__init__(name="moqesh-control", daemon=True)
@@ -320,7 +320,7 @@ class ControlLoop(threading.Thread):
 
 
 class EventSender(threading.Thread):
-    """Envía eventos por lotes con jitter; mantiene buffer de reintento (acotado)."""
+    """Send events in batches with jitter; keeps a (bounded) retry buffer."""
 
     def __init__(self, client: ServerClient, interval: float, jitter: float, *, max_buffer: int = 50_000) -> None:
         super().__init__(name="moqesh-sender", daemon=True)
@@ -329,7 +329,7 @@ class EventSender(threading.Thread):
         self._jitter = jitter
         self._max_buffer = max_buffer
         self._queue: queue.Queue[dict] = queue.Queue()
-        self._pending: list[dict] = []  # eventos que no se pudieron enviar
+        self._pending: list[dict] = []  # events that could not be sent
         self._stop = threading.Event()
 
     def enqueue(self, event: dict) -> None:
@@ -339,7 +339,7 @@ class EventSender(threading.Thread):
         while not self._stop.is_set():
             self._stop.wait(_jittered(self._interval, self._jitter))
             self._flush()
-        self._flush()  # último intento al detenerse
+        self._flush()  # last attempt on shutdown
 
     def _drain(self) -> list[dict]:
         batch = list(self._pending)
@@ -356,14 +356,14 @@ class EventSender(threading.Thread):
         if not batch:
             return
         if not self._client.post_events(batch):
-            # Reintentar en el próximo ciclo: conservar los más recientes (cap de memoria).
+            # Retry next cycle: keep the most recent ones (memory cap).
             self._pending = batch[-self._max_buffer :]
 
     def stop(self) -> None:
         self._stop.set()
 
 
-# ----------------------------- servidor honeypot -----------------------------
+# ----------------------------- honeypot server ------------------------------
 
 
 class _HoneypotServer(ThreadingHTTPServer):
@@ -373,7 +373,7 @@ class _HoneypotServer(ThreadingHTTPServer):
 
 
 class _Handler(BaseHTTPRequestHandler):
-    """Delega todo método al agente; silencia el logging por defecto."""
+    """Delegate every method to the agent; silence the default logging."""
 
     protocol_version = "HTTP/1.1"
 
@@ -388,11 +388,11 @@ class _Handler(BaseHTTPRequestHandler):
     do_GET = do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _dispatch
 
 
-# ----------------------------- agente ----------------------------------------
+# ----------------------------- agent -----------------------------------------
 
 
 class Agent:
-    """Orquesta honeypot local + control firmado + envío por lotes."""
+    """Orchestrates the local honeypot + signed control + batched delivery."""
 
     def __init__(self, cfg: AgentConfig, client: ServerClient | None = None) -> None:
         self._cfg = cfg
@@ -400,16 +400,16 @@ class Agent:
         self._gen = LabyrinthGenerator()
         self._engine = ScenarioEngine()
 
-        # Estado de control (protegido por lock; lo escribe el hilo de control).
+        # Control state (lock-protected; written by the control thread).
         self._state_lock = threading.Lock()
-        self._enabled = False  # por defecto 404 a todo hasta el primer control válido
+        self._enabled = False  # 404 to everything by default until the first valid control
         self._generation_mode = "Template"
         self._opts = LabyrinthOptions(mode="Template", seed=_DEFAULT_SEED, realism_level=3)
         self._brand = LabyrinthGenerator.brand_for(self._opts)
         self._scenario: ScenarioData | None = None
         self._scenario_id = 0
 
-        # Progreso por IP (protegido por su propio lock).
+        # Per-IP progress (protected by its own lock).
         self._prog_lock = threading.Lock()
         self._ip_progress: dict[str, IpProgress] = {}
 
@@ -419,11 +419,11 @@ class Agent:
     # ---- control ----
 
     def apply_control(self, data: dict) -> None:
-        """Aplica el estado deseado del servidor (ya verificado por el cliente)."""
+        """Apply the server's desired state (already verified by the client)."""
         seed = data.get("seed") or _DEFAULT_SEED
         realism = max(1, min(int(data.get("realism_level") or 3), 5))
-        # El agente no perfila sitios (Mimic), así que genera siempre en modo Template;
-        # "Static" sí se honra: sirve 404 fuera del escenario.
+        # The agent does not profile sites (Mimic), so it always generates in Template mode;
+        # "Static" is honored: it serves 404 outside the scenario.
         mode = data.get("generation_mode") or "Template"
         new_sid = int(data.get("scenario_id") or 0)
         pack = data.get("scenario")
@@ -441,14 +441,14 @@ class Agent:
             self._scenario_id = new_sid
         if scenario_changed:
             with self._prog_lock:
-                self._ip_progress.clear()  # el escenario cambió: el progreso previo es inválido
-        logger.info("control aplicado: enabled=%s seed=%s scenario_id=%s", self._enabled, seed, new_sid)
+                self._ip_progress.clear()  # the scenario changed: previous progress is invalid
+        logger.info("control applied: enabled=%s seed=%s scenario_id=%s", self._enabled, seed, new_sid)
 
     def _snapshot(self) -> tuple[bool, LabyrinthOptions, str, ScenarioData | None, str]:
         with self._state_lock:
             return self._enabled, self._opts, self._brand, self._scenario, self._generation_mode
 
-    # ---- manejo de peticiones ----
+    # ---- request handling ----
 
     @staticmethod
     def _source_ip(handler: BaseHTTPRequestHandler, headers: dict[str, str]) -> str:
@@ -467,7 +467,7 @@ class Agent:
         query = query or None
         headers = {k.lower(): v for k, v in handler.headers.items()}
 
-        # Drenar el cuerpo (no se usa, pero deja la conexión limpia para keep-alive).
+        # Drain the body (unused, but leaves the connection clean for keep-alive).
         clen = int(headers.get("content-length") or 0)
         if clen > 0:
             try:
@@ -498,7 +498,7 @@ class Agent:
             else:
                 body, content_type, status, node_kind = _NOT_FOUND, "text/html; charset=utf-8", 404, "notfound"
 
-        # Señales fuertes acumulativas (sólo cuando hay escenario resuelto).
+        # Cumulative strong signals (only when a scenario resolved).
         strong: dict[str, bool] = {}
         facts: dict | None = None
         if enabled and scenario is not None and hit is not None:
@@ -555,10 +555,10 @@ class Agent:
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    # ---- ciclo de vida ----
+    # ---- lifecycle ----
 
     def _preflight(self, retries: int = 8) -> None:
-        """Preflight contra /healthz; loguea y reintenta con backoff, pero nunca bloquea el arranque."""
+        """Preflight against /healthz; logs and retries with backoff, but never blocks startup."""
         delay = 1.0
         for attempt in range(1, retries + 1):
             if self._client.healthz():
@@ -567,7 +567,7 @@ class Agent:
             logger.warning("preflight: %s inalcanzable (intento %d/%d)", self._cfg.server, attempt, retries)
             time.sleep(min(delay, 30.0))
             delay *= 2
-        logger.warning("preflight agotado; se arranca igualmente (eventos se bufferizan)")
+        logger.warning("preflight exhausted; starting anyway (events are buffered)")
 
     def run(self) -> None:
         self._preflight()
@@ -576,13 +576,13 @@ class Agent:
             self.apply_control(initial)
         self._control.start()
         self._sender.start()
-        httpd = _HoneypotServer(("0.0.0.0", self._cfg.port), _Handler)  # noqa: S104 - honeypot: escucha pública a propósito
+        httpd = _HoneypotServer(("0.0.0.0", self._cfg.port), _Handler)  # noqa: S104 - honeypot: listens publicly on purpose
         httpd.agent = self
-        logger.info("honeypot escuchando en 0.0.0.0:%d", self._cfg.port)
+        logger.info("honeypot listening on 0.0.0.0:%d", self._cfg.port)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            logger.info("deteniendo agente…")
+            logger.info("stopping agent...")
         finally:
             self._control.stop()
             self._sender.stop()
@@ -601,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = AgentConfig.from_env()
     except ValueError as exc:
-        logger.error("configuración inválida: %s", exc)
+        logger.error("invalid configuration: %s", exc)
         return 2
     Agent(cfg).run()
     return 0

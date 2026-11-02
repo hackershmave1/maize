@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: pip install -e . ruff pytest
       - name: Lint (ruff)
         run: ruff check moqesh tests
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: npm ci --no-fund --no-audit
-      - name: Build del SPA
+      - name: Build the SPA
         run: npm run build

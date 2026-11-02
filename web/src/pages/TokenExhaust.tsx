@@ -33,10 +33,10 @@ export function TokenExhaust() {
   }, []);
 
   const kpis = [
-    { icon: Flame, label: 'Tokens quemados (est.)', value: data ? data.totalTokensBurned.toLocaleString() : '—', color: 'text-red' },
-    { icon: Clock, label: 'Tiempo desperdiciado', value: data ? fmtMs(data.totalTimeWastedMs) : '—', color: 'text-amber' },
-    { icon: Network, label: 'Nodos servidos', value: data ? data.totalNodesServed.toLocaleString() : '—', color: 'text-blue' },
-    { icon: Bot, label: 'Sesiones atrapadas', value: data ? String(data.sessionsEngaged) : '—', color: 'text-accent' },
+    { icon: Flame, label: 'Tokens burned (est.)', value: data ? data.totalTokensBurned.toLocaleString() : '-', color: 'text-red' },
+    { icon: Clock, label: 'Time wasted', value: data ? fmtMs(data.totalTimeWastedMs) : '-', color: 'text-amber' },
+    { icon: Network, label: 'Nodes served', value: data ? data.totalNodesServed.toLocaleString() : '-', color: 'text-blue' },
+    { icon: Bot, label: 'Sessions trapped', value: data ? String(data.sessionsEngaged) : '-', color: 'text-accent' },
   ];
 
   return (
@@ -44,7 +44,7 @@ export function TokenExhaust() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Token Exhaust</h1>
         <p className="text-sm text-fg-muted mt-1">
-          Recursos que el laberinto le hizo consumir a los agentes: tokens, tiempo y profundidad.
+          Resources the labyrinth made agents consume: tokens, time and depth.
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           {INTENSITY_LABELS.map((label, lvl) => (
@@ -57,7 +57,7 @@ export function TokenExhaust() {
             </span>
           ))}
           <span className="text-[11px] text-fg-muted self-center">
-            intensidad adaptativa: coherente por defecto → cebo + tarpit al confirmar agente
+            adaptive intensity: coherent by default → lure + tarpit once an agent is confirmed
           </span>
         </div>
       </div>
@@ -77,20 +77,20 @@ export function TokenExhaust() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-surface border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <h3 className="text-sm font-medium">Top consumidores</h3>
+            <h3 className="text-sm font-medium">Top consumers</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-fg-muted uppercase tracking-wider">
-                  <th className="text-left px-4 py-2 font-medium">Origen</th>
+                  <th className="text-left px-4 py-2 font-medium">Source</th>
                   <th className="text-right px-4 py-2 font-medium">Tokens</th>
-                  <th className="text-right px-4 py-2 font-medium">Tiempo</th>
-                  <th className="text-right px-4 py-2 font-medium">Nodos</th>
+                  <th className="text-right px-4 py-2 font-medium">Time</th>
+                  <th className="text-right px-4 py-2 font-medium">Nodes</th>
                   <th className="text-right px-4 py-2 font-medium">Prof.</th>
                   <th className="text-right px-4 py-2 font-medium">Score</th>
                   <th className="text-left px-4 py-2 font-medium">Intens.</th>
-                  <th className="text-left px-4 py-2 font-medium">Veredicto</th>
+                  <th className="text-left px-4 py-2 font-medium">Verdict</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,7 +115,7 @@ export function TokenExhaust() {
                   </tr>
                 ))}
                 {(!data || data.topBurners.length === 0) && !loading && (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-fg-muted text-sm">Aún no hay sesiones atrapadas</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-fg-muted text-sm">No sessions trapped yet</td></tr>
                 )}
               </tbody>
             </table>
@@ -124,23 +124,23 @@ export function TokenExhaust() {
 
         <div className="bg-surface border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
-            <h3 className="text-sm font-medium">Por modelo (pruebas con IA)</h3>
+            <h3 className="text-sm font-medium">By model (AI tests)</h3>
           </div>
           <div className="p-4 space-y-3">
             {data?.byModel.map(m => (
               <div key={m.model} className="border border-border/60 rounded-md p-3">
                 <div className="font-mono text-xs text-accent break-all mb-1">{m.model}</div>
                 <div className="flex justify-between text-xs text-fg-muted">
-                  <span>{m.sessions} sesiones</span>
+                  <span>{m.sessions} sessions</span>
                   <span className="font-mono">{m.tokens.toLocaleString()} tok</span>
                 </div>
-                <div className="text-xs text-fg-muted mt-1">score medio: <span className="font-mono text-fg">{m.avgScore.toFixed(2)}</span></div>
+                <div className="text-xs text-fg-muted mt-1">avg score: <span className="font-mono text-fg">{m.avgScore.toFixed(2)}</span></div>
               </div>
             ))}
             {(!data || data.byModel.length === 0) && (
               <p className="text-xs text-fg-muted text-center py-6">
-                Sin atribución de modelo todavía. Ejecuta el harness de agente (Claude local / OpenRouter)
-                para poblar esta sección.
+                No model attribution yet. Run the agent harness (local Claude / OpenRouter)
+                to populate this section.
               </p>
             )}
           </div>

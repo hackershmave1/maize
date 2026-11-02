@@ -56,31 +56,31 @@ export function Honeypots() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Honeypots</h1>
-          <p className="text-sm text-fg-muted mt-1">Gestión de servicios honeypot</p>
+          <p className="text-sm text-fg-muted mt-1">Honeypot service management</p>
         </div>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 px-3 py-2 bg-accent text-bg rounded-md text-sm font-medium hover:bg-accent/90 transition-colors"
         >
-          <Plus className="w-4 h-4" /> Nuevo honeypot
+          <Plus className="w-4 h-4" /> New honeypot
         </button>
       </div>
 
       {showCreate && (
         <div className="bg-surface border border-border rounded-lg p-5 mb-6">
-          <h3 className="text-sm font-medium mb-4">Crear honeypot</h3>
+          <h3 className="text-sm font-medium mb-4">Create honeypot</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-fg-muted mb-1">Nombre</label>
+              <label className="block text-xs text-fg-muted mb-1">Name</label>
               <input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 className="w-full bg-surface-alt border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                placeholder="Mi honeypot"
+                placeholder="My honeypot"
               />
             </div>
             <div>
-              <label className="block text-xs text-fg-muted mb-1">Tipo</label>
+              <label className="block text-xs text-fg-muted mb-1">Type</label>
               <select
                 value={newType}
                 onChange={e => setNewType(e.target.value)}
@@ -92,7 +92,7 @@ export function Honeypots() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-fg-muted mb-1">Puerto</label>
+              <label className="block text-xs text-fg-muted mb-1">Port</label>
               <input
                 type="number"
                 value={newPort}
@@ -102,8 +102,8 @@ export function Honeypots() {
             </div>
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={handleCreate} className="px-4 py-2 bg-accent text-bg rounded text-sm font-medium hover:bg-accent/90">Crear</button>
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-surface-alt rounded text-sm text-fg-muted hover:text-fg">Cancelar</button>
+            <button onClick={handleCreate} className="px-4 py-2 bg-accent text-bg rounded text-sm font-medium hover:bg-accent/90">Create</button>
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-surface-alt rounded text-sm text-fg-muted hover:text-fg">Cancel</button>
           </div>
         </div>
       )}
@@ -142,7 +142,7 @@ export function Honeypots() {
                 <button
                   onClick={() => copyUrl(hp.id, hp.port)}
                   className="text-fg-muted hover:text-accent shrink-0"
-                  title="Copiar URL"
+                  title="Copy URL"
                 >
                   {copiedId === hp.id ? <Check className="w-3 h-3 text-green" /> : <Copy className="w-3 h-3" />}
                 </button>
@@ -156,7 +156,7 @@ export function Honeypots() {
                   hp.isActive ? 'bg-red/10 text-red hover:bg-red/20' : 'bg-green/10 text-green hover:bg-green/20'
                 }`}
               >
-                <Power className="w-3 h-3" /> {hp.isActive ? 'Detener' : 'Activar'}
+                <Power className="w-3 h-3" /> {hp.isActive ? 'Stop' : 'Start'}
               </button>
               <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium bg-blue/10 text-blue hover:bg-blue/20">
                 <Upload className="w-3 h-3" /> Upload
@@ -172,8 +172,8 @@ export function Honeypots() {
         ))}
         {honeypots.length === 0 && !loading && (
           <div className="col-span-full text-center py-12 text-fg-muted">
-            <p className="text-sm">No hay honeypots configurados</p>
-            <p className="text-xs mt-1">Crea uno para empezar a monitorear</p>
+            <p className="text-sm">No honeypots configured</p>
+            <p className="text-xs mt-1">Create one to start monitoring</p>
           </div>
         )}
       </div>

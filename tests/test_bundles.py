@@ -1,8 +1,8 @@
-"""Tests del generador de bundles estáticos (modo agentless).
+"""Tests for the static bundle generator (agentless mode).
 
-Verifica que `generate_for_sensor` crea los bundles pedidos, que los archivos
-existen, que la estructura VARÍA entre bundles, que nada colocado es ejecutable y
-que el MANIFEST viaja dentro del archivo. La DB la aísla el conftest.
+Checks that `generate_for_sensor` creates the requested bundles, that the files
+exist, that the structure VARIES between bundles, that nothing placed is executable and
+that the MANIFEST travels inside the archive. The conftest isolates the DB.
 """
 
 import json
@@ -14,26 +14,26 @@ from moqesh.bundles import bundles_dir, generate_for_sensor
 from moqesh.db import SessionLocal, init_db
 from moqesh.models import Sensor
 
-# Extensiones que un web server podría ejecutar: ninguna debe aparecer en el cebo.
-_EJECUTABLES = (".php", ".sh", ".cgi", ".aspx", ".jsp", ".pl", ".py", ".phtml")
+# Extensions a web server could execute: none must appear in the lure.
+_EXECUTABLES = (".php", ".sh", ".cgi", ".aspx", ".jsp", ".pl", ".py", ".phtml")
 
 
-def _leer_manifest(ruta) -> tuple[dict, list[str]]:
-    """Abre el bundle (zip o tar.gz) y devuelve (manifest, nombres de miembros)."""
-    if ruta.name.endswith(".zip"):
-        with zipfile.ZipFile(ruta) as zf:
-            nombres = zf.namelist()
-            assert "MANIFEST.json" in nombres
-            return json.loads(zf.read("MANIFEST.json")), nombres
-    with tarfile.open(ruta, "r:gz") as tf:
-        nombres = tf.getnames()
-        assert "MANIFEST.json" in nombres
+def _read_manifest(path) -> tuple[dict, list[str]]:
+    """Open the bundle (zip or tar.gz) and return (manifest, member names)."""
+    if path.name.endswith(".zip"):
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            assert "MANIFEST.json" in names
+            return json.loads(zf.read("MANIFEST.json")), names
+    with tarfile.open(path, "r:gz") as tf:
+        names = tf.getnames()
+        assert "MANIFEST.json" in names
         extraido = tf.extractfile("MANIFEST.json")
         assert extraido is not None
-        return json.loads(extraido.read()), nombres
+        return json.loads(extraido.read()), names
 
 
-def test_generate_for_sensor_crea_bundles_variados_e_inertes():
+def test_generate_for_sensor_creates_varied_inert_bundles():
     init_db()
     with SessionLocal() as db:
         sensor = Sensor(
@@ -42,7 +42,7 @@ def test_generate_for_sensor_crea_bundles_variados_e_inertes():
             realism_level=4,
             vocabulary_theme="devops",
             base_path="/lure",
-            key_id=uuid4().hex[:16],  # único: evita chocar con el sensor 'local' sembrado
+            key_id=uuid4().hex[:16],  # unique: avoids clashing with the seeded 'local' sensor
         )
         db.add(sensor)
         db.commit()
@@ -50,29 +50,29 @@ def test_generate_for_sensor_crea_bundles_variados_e_inertes():
 
         filas = generate_for_sensor(db, sensor, count=3)
 
-        # Se crean exactamente 3 filas persistidas.
+        # Exactly 3 persisted rows are created.
         assert len(filas) == 3
         assert all(f.id is not None and f.sensor_id == sensor.id for f in filas)
 
         manifests: list[dict] = []
         for fila in filas:
-            ruta = bundles_dir() / fila.filename
-            # El archivo existe en disco y no está vacío.
-            assert ruta.exists() and ruta.stat().st_size > 0
+            path = bundles_dir() / fila.filename
+            # The archive exists on disk and is not empty.
+            assert path.exists() and path.stat().st_size > 0
             assert fila.archive_format in ("zip", "tgz")
 
-            manifest, _nombres = _leer_manifest(ruta)
+            manifest, _names = _read_manifest(path)
             manifests.append(manifest)
 
-            # El MANIFEST lleva seed y fecha (auditoría/uninstall).
+            # The MANIFEST carries the seed and date (audit/uninstall).
             assert manifest["seed"] == fila.seed
             assert manifest["created_at"]
-            assert manifest["files"], "el bundle debería colocar archivos"
+            assert manifest["files"], "the bundle should place files"
 
-            # Ningún archivo colocado tiene extensión ejecutable.
-            for archivo in manifest["files"]:
-                assert not archivo.lower().endswith(_EJECUTABLES), archivo
+            # No placed file has an executable extension.
+            for archive in manifest["files"]:
+                assert not archive.lower().endswith(_EXECUTABLES), archive
 
-        # Al menos dos bundles difieren en estructura (rutas relativas a la raíz).
-        relativos = [frozenset(p.split("/", 1)[1] for p in m["files"]) for m in manifests]
-        assert len(set(relativos)) >= 2, "los bundles no deberían compartir estructura"
+        # At least two bundles differ in structure (paths relative to the root).
+        relative_sets = [frozenset(p.split("/", 1)[1] for p in m["files"]) for m in manifests]
+        assert len(set(relative_sets)) >= 2, "bundles should not share structure"

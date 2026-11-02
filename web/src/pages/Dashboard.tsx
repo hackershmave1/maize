@@ -48,7 +48,7 @@ export function Dashboard() {
   useEffect(() => {
     const refresh = () => api.dashboard.overview().then(setData).catch(() => setData(mockData));
     refresh();
-    // Tiempo real: refresca (con debounce) ante cada request/alerta del honeypot.
+    // Real time: refresh (debounced) on every honeypot request/alert.
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsub = connectLive(() => {
       if (timer) clearTimeout(timer);
@@ -64,14 +64,14 @@ export function Dashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-fg-muted mt-1">Monitoreo de actividad en honeypots</p>
+        <p className="text-sm text-fg-muted mt-1">Honeypot activity monitoring</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard title="Total Requests" value={data.totalRequests.toLocaleString()} icon={Activity} color="accent" subtitle="Últimas 24h" />
-        <KpiCard title="Sesiones Activas" value={data.activeSessions} icon={Users} color="blue" />
-        <KpiCard title="AI Agents" value={data.aiAgentsDetected} icon={Bot} color="red" subtitle="Score ≥ 0.6" />
-        <KpiCard title="Alertas" value={data.unresolvedAlerts} icon={Bell} color="green" subtitle="Sin resolver" />
+        <KpiCard title="Total Requests" value={data.totalRequests.toLocaleString()} icon={Activity} color="accent" subtitle="Last 24h" />
+        <KpiCard title="Active Sessions" value={data.activeSessions} icon={Users} color="blue" />
+        <KpiCard title="AI Agents" value={data.aiAgentsDetected} icon={Bot} color="red" subtitle="Score >= 0.6" />
+        <KpiCard title="Alerts" value={data.unresolvedAlerts} icon={Bell} color="green" subtitle="Unresolved" />
       </div>
 
       <div className="mb-6">

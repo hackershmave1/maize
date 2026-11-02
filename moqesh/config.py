@@ -1,8 +1,8 @@
-"""Configuración central por entorno (pydantic-settings).
+"""Central environment-based configuration (pydantic-settings).
 
-Fuente única de verdad: reemplaza el binding de appsettings.json del proyecto
-original. Todas las variables se leen de entorno con prefijo `MOQESH_`
-(p.ej. `MOQESH_SEED`, `MOQESH_AI_ENABLED`) o de un fichero `.env`.
+Single source of truth: replaces the original project's appsettings.json
+binding. Every variable is read from the environment with the `MOQESH_` prefix
+(e.g. `MOQESH_SEED`, `MOQESH_AI_ENABLED`) or from a `.env` file.
 """
 
 from __future__ import annotations
@@ -16,68 +16,68 @@ class Settings(BaseSettings):
     # --- Almacenamiento ---
     db_path: str = "moqesh.db"
 
-    # Ruta al build del frontend (vacío = junto al paquete: ../web/dist).
+    # Path to the frontend build (empty = next to the package: ../web/dist).
     web_dist: str = ""
 
     # --- Puertos ---
     honeypot_port: int = 8080
     dashboard_port: int = 5000
 
-    # URL pública del servidor Moqesh (a la que se conectan los sensores remotos).
+    # Public URL of the Moqesh server (the one remote sensors connect to).
     public_url: str = ""
 
-    # --- Generación de contenido ---
-    seed: str = ""  # vacío = se genera uno por deployment
+    # --- Content generation ---
+    seed: str = ""  # empty = one is generated per deployment
     generation_mode: str = "Template"  # Template | Mimic | Static
-    target_url: str | None = None  # solo Mimic
-    # Perfil de sitio built-in seleccionable por despliegue (saas|corp|ecommerce|nonprofit...).
-    # Da taxonomía de rutas, vocabulario y colecciones de API realistas sin crawlear nada.
-    # Vacío = laberinto genérico por seed. En modo Mimic manda el crawl de target_url.
+    target_url: str | None = None  # Mimic only
+    # Built-in site profile selectable per deployment (saas|corp|ecommerce|nonprofit...).
+    # Provides realistic route taxonomy, vocabulary and API collections without crawling anything.
+    # Empty = generic labyrinth by seed. In Mimic mode the target_url crawl wins.
     site_profile: str = ""
     realism_level: int = 3  # 1..5
-    vocabulary_theme: str = ""  # corporate|devops|saas|ecommerce ("" = por seed)
+    vocabulary_theme: str = ""  # corporate|devops|saas|ecommerce ("" = by seed)
     brand_name: str = ""
     tarpit_delay_ms: int = 0
     server_banner: str = "nginx"
     token_exhaust_enabled: bool = True
 
-    # --- World: contenido estático INERTE multi-sitio (fuente primaria; sustituye al laberinto) ---
-    # El honeypot sirve ficheros reales de un árbol en disco (varios portales). Solo bytes, nunca
-    # ejecuta nada. Con un World activo, el laberinto determinista queda OFF (era la fuente de los
-    # delatores) salvo que no haya World. El agente "worldsmith" monta/expande este World.
+    # --- World: multi-site INERT static content (primary source; replaces the labyrinth) ---
+    # The honeypot serves real files from a tree on disk (several portals). Only bytes, it never
+    # executes anything. With an active World, the deterministic labyrinth is OFF (it was the source of the
+    # giveaways) unless there is no World. The "worldsmith" agent builds/expands this World.
     world_enabled: bool = True
-    world_path: str = ""  # vacío = junto a la DB (<dir de la DB>/world)
-    world_autoseed: bool = True  # si el World está vacío, copia la semilla curada empaquetada
+    world_path: str = ""  # empty = next to the DB (<DB dir>/world)
+    world_autoseed: bool = True  # if the World is empty, copy the packaged curated seed
 
-    # --- Tarpit adaptativo (motor coherente -> cebo) ---
-    # El laberinto es coherente y finito por defecto (indetectable). Solo cuando una sesión se
-    # confirma como agente hostil (score alto) sube la "intensidad": prosa/logs más largos y, sobre
-    # todo, un retardo creciente por respuesta que quema wall-clock y tokens del agente. Invisible
-    # para tráfico humano/desconocido (intensidad 0 = sin retardo extra).
+    # --- Adaptive tarpit (coherent engine -> lure) ---
+    # The labyrinth is coherent and finite by default (undetectable). Only when a session is
+    # confirmed as a hostile agent (high score) does the "intensity" rise: longer prose/logs and, above
+    # all, a growing per-response delay that burns the agent's wall-clock and tokens. Invisible
+    # to human/unknown traffic (intensity 0 = no extra delay).
     adaptive_tarpit: bool = True
-    tarpit_max_ms: int = 6000  # retardo máximo por respuesta a intensidad 3 (agente confirmado)
-    # Opt-in de "quema bruta": a intensidad máxima la API vuelve a paginar sin fin. Rompe el
-    # invariante de coherencia (vuelve a ser fingerprinteable), por eso está OFF por defecto.
+    tarpit_max_ms: int = 6000  # max delay per response at intensity 3 (confirmed agent)
+    # "Brute burn" opt-in: at max intensity the API paginates endlessly again. Breaks the
+    # coherence invariant (becomes fingerprintable again), which is why it is OFF by default.
     allow_infinite_on_confirmed: bool = False
 
-    # Escenario CTF (corp-breach/git-leak): cadena de migajas con gates de credenciales reales.
-    # Atrapa activamente a quien la siga (reuso de credencial -> bloqueo), PERO el patrón de la
-    # cadena es reconocible por un modelo de IA escéptico. Off por defecto = máximo sigilo (solo
-    # el laberinto realista); on = cebo activo. Decisión por despliegue.
+    # CTF scenario (corp-breach/git-leak): breadcrumb chain with real credential gates.
+    # Actively traps whoever follows it (credential reuse -> block), BUT the chain's pattern
+    # is recognizable by a skeptical AI model. Off by default = max stealth (only
+    # the realistic labyrinth); on = active lure. A per-deployment decision.
     scenarios_enabled: bool = False
 
-    # --- Detección / alertas ---
+    # --- Detection / alerts ---
     alert_score_threshold: float = 0.5
     alert_min_requests: int = 5
 
-    # --- Bloqueo / notificaciones ---
+    # --- Blocking / notifications ---
     webhook_url: str = ""
     webhook_secret: str = ""
     enforce_block: bool = True
-    auto_block_score: float = 0.0  # 0 = auto-bloqueo por score desactivado
+    auto_block_score: float = 0.0  # 0 = score-based auto-block disabled
     enable_iptables: bool = False
 
-    # --- Confirmación con IA (opcional) ---
+    # --- AI confirmation (optional) ---
     ai_enabled: bool = False
     ai_provider: str = "heuristic"  # heuristic | openai
     ai_base_url: str = ""
@@ -87,24 +87,24 @@ class Settings(BaseSettings):
     ai_gray_zone_high: float = 0.65
     ai_confirm_threshold: float = 0.7
 
-    # --- Worldsmith (agente IA que CONSTRUYE/evoluciona el World + el cebo) ---
-    # Produce SOLO ficheros estáticos inertes (validados mecánicamente) y un pack de cebo. No
-    # corre por petición: se invoca bajo demanda (CLI `python -m moqesh.worldsmith` / dashboard).
-    worldsmith_provider: str = "stub"  # stub (sin IA, determinista) | api (Anthropic) | claude_cli
-    worldsmith_model: str = ""  # p.ej. claude-sonnet-4-5 (api) o alias del CLI
-    worldsmith_api_key: str = ""  # provider=api; si vacío, cae a ai_api_key
+    # --- Worldsmith (AI agent that BUILDS/evolves the World + the lure) ---
+    # Produces ONLY inert static files (mechanically validated) and a lure pack. It does
+    # not run per request: it is invoked on demand (CLI `python -m moqesh.worldsmith` / dashboard).
+    worldsmith_provider: str = "stub"  # stub (no AI, deterministic) | api (Anthropic) | claude_cli
+    worldsmith_model: str = ""  # e.g. claude-sonnet-4-5 (api) or a CLI alias
+    worldsmith_api_key: str = ""  # provider=api; if empty, falls back to ai_api_key
     worldsmith_base_url: str = "https://api.anthropic.com"
     worldsmith_portals: int = 4
-    worldsmith_brand: str = ""  # marca a usar; vacío = la deriva el agente desde el brief
+    worldsmith_brand: str = ""  # brand to use; empty = the agent derives it from the brief
 
-    # --- Autenticación del dashboard (admin único) ---
+    # --- Dashboard authentication (single admin) ---
     admin_user: str = "admin"
-    admin_password: str = ""  # vacío = se genera una y se imprime en el log (una vez)
-    session_secret: str = ""  # vacío = se genera y persiste junto a la DB (estable por despliegue)
-    session_max_age: int = 86400  # vida de la sesión en segundos (1 día)
-    cookie_secure: bool = False  # True tras TLS (subdominio admin); False en local/túnel http
+    admin_password: str = ""  # empty = one is generated and printed to the log (once)
+    session_secret: str = ""  # empty = generated and persisted next to the DB (stable per deployment)
+    session_max_age: int = 86400  # session lifetime in seconds (1 day)
+    cookie_secure: bool = False  # True behind TLS (admin subdomain); False locally/over an http tunnel
 
-    # --- CORS (dev del frontend) ---
+    # --- CORS (frontend dev) ---
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
 

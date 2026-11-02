@@ -1,8 +1,8 @@
 """Motor coherente + adaptativo (Fase 1).
 
-Verifica el giro de diseño: la API es FINITA y COHERENTE (ya no infinita ni con un
-`total` que cambia por página), y la intensidad adaptativa solo añade VOLUMEN de cebo
-coherente — nunca incoherencia, nunca infinito (salvo el opt-in de quema bruta).
+Checks the design pivot: the API is FINITE and COHERENT (no longer infinite or with a
+`total` that changes per page), and adaptive intensity only adds coherent lure VOLUME,
+never incoherence, never infinite (except for the brute-burn opt-in).
 """
 
 import json
@@ -14,7 +14,7 @@ from moqesh.labyrinth import LabyrinthGenerator, LabyrinthOptions, effective_api
 
 
 def _collection(gen: LabyrinthGenerator, opts: LabyrinthOptions) -> str:
-    """Una colección de API que EXISTE en este deployment (recurso real del tema)."""
+    """An API collection that EXISTS in this deployment (a real resource of the theme)."""
     return f"/api/v2/{vocab.resources(gen.global_ctx(opts).theme)[0]}"
 
 
@@ -23,7 +23,7 @@ def _body(gen: LabyrinthGenerator, opts: LabyrinthOptions, path: str, intensity:
 
 
 def test_api_total_stable_per_collection():
-    # El delator principal era que `total` se re-sorteaba por página: aquí es estable.
+    # The main giveaway was that `total` was re-drawn per page: here it is stable.
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
@@ -34,7 +34,7 @@ def test_api_total_stable_per_collection():
 
 
 def test_api_pagination_terminates():
-    # Un sitio real es finito: la paginación TERMINA (next=null en la última página).
+    # A real site is finite: pagination ENDS (next=null on the last page).
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
@@ -46,7 +46,7 @@ def test_api_pagination_terminates():
             break
         path = nxt[0]
         pages += 1
-        assert pages <= last_page, "la API paginó más allá de la última página"
+        assert pages <= last_page, "the API paginated past the last page"
     assert pages == last_page
     assert _body(gen, opts, path)["links"]["next"] is None
 
@@ -55,13 +55,13 @@ def test_api_page_out_of_range_is_404():
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
-    assert gen.is_reachable(opts, coll)  # página 1 existe
-    assert not gen.is_reachable(opts, f"{coll}/page/999999")  # muy fuera de rango -> 404
-    assert not gen.is_reachable(opts, "/api/v2/nonexistent-xyz")  # colección inexistente -> 404
+    assert gen.is_reachable(opts, coll)  # page 1 exists
+    assert not gen.is_reachable(opts, f"{coll}/page/999999")  # far out of range -> 404
+    assert not gen.is_reachable(opts, "/api/v2/nonexistent-xyz")  # nonexistent collection -> 404
 
 
 def test_record_coherent_across_pages_and_endpoints():
-    # El mismo id da los mismos campos en la lista y en /colección/<id> (coherencia verificable).
+    # The same id gives the same fields in the list and at /collection/<id> (verifiable coherence).
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
@@ -82,7 +82,7 @@ def test_record_out_of_range_is_404():
 
 
 def test_query_pagination_is_canonicalized():
-    # ?page=N y /page/N devuelven lo MISMO (si cambiar ?page= no cambiara nada, sería delator).
+    # ?page=N and /page/N return the SAME thing (if changing ?page= changed nothing, it would be a giveaway).
     coll = "/api/v2/tenant"
     assert effective_api_path(coll, "page=2") == f"{coll}/page/2"
     assert effective_api_path(coll, "sort=x&page=3") == f"{coll}/page/3"
@@ -94,9 +94,9 @@ def test_intensity_grows_coherent_bait_but_not_api():
     opts = LabyrinthOptions(seed="deploy-123")
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
-    # El contenido de la API NO cambia con la intensidad (coherencia: un registro es un registro).
+    # The API content does NOT change with intensity (coherence: a record is a record).
     assert gen.generate(opts, coll, 0).body == gen.generate(opts, coll, 3).body
-    # Pero la prosa/historial coherente SÍ crece (más que leer = más tokens del agente).
+    # But the coherent prose/history DOES grow (more to read = more agent tokens).
     doc0 = len(gen.generate(opts, "/ops/CHANGELOG.md", 0).body)
     doc3 = len(gen.generate(opts, "/ops/CHANGELOG.md", 3).body)
     assert doc3 > doc0
@@ -119,14 +119,14 @@ def test_intensity_for_thresholds():
 
 
 def test_allow_infinite_opt_in_reopens_pagination():
-    # Opt-in de quema bruta: a intensidad máxima la API vuelve a ser infinita (rompe el sigilo).
+    # Brute-burn opt-in: at max intensity the API becomes infinite again (breaks stealth).
     opts = LabyrinthOptions(seed="deploy-123", allow_infinite=True)
     gen = LabyrinthGenerator()
     coll = _collection(gen, opts)
     far = f"{coll}/page/999999"
-    assert gen.is_reachable(opts, far, intensity=3)  # cualquier página es alcanzable
-    assert gen.links_for(opts, far, intensity=3)  # y siempre hay 'next'
-    # Sin el opt-in, la misma página lejana da 404.
+    assert gen.is_reachable(opts, far, intensity=3)  # any page is reachable
+    assert gen.links_for(opts, far, intensity=3)  # and there is always a 'next'
+    # Without the opt-in, the same far page gives 404.
     plain = LabyrinthOptions(seed="deploy-123")
     assert not gen.is_reachable(plain, far, intensity=3)
 
@@ -140,7 +140,7 @@ def test_api_response_is_valid_json():
     assert isinstance(body["data"], list)
     assert body["links"]["prev"] is None
     assert set(body) >= {"page", "per_page", "total", "total_pages", "data", "links"}
-    # Coherencia interna: el nº de registros de la página cuadra con total/per_page.
+    # Internal coherence: the page's record count matches total/per_page.
     expected = min(body["per_page"], body["total"])
     assert len(body["data"]) == expected
     assert body["total_pages"] == max(1, math.ceil(body["total"] / body["per_page"]))

@@ -1,20 +1,20 @@
-"""Perfilador de sitios reales para el modo Mimic (read-only).
+"""Real-site profiler for Mimic mode (read-only).
 
-Inspirado en `Moqesh.TokenExhaust.SiteProfiler` (C#) pero reescrito idiomatico:
-hace un crawl superficial y ACOTADO del mismo origen (httpx async + html.parser
-de la stdlib, sin dependencias nuevas) y extrae un perfil JSON-serializable que
-se guarda en `SiteProfile.profile_json`. Genérico: funciona contra cualquier
-dominio objetivo.
+Inspired by `Moqesh.TokenExhaust.SiteProfiler` (C#) but rewritten idiomatically:
+it does a shallow, BOUNDED same-origin crawl (async httpx + the stdlib's html.parser,
+no new dependencies) and extracts a JSON-serializable profile that
+is stored in `SiteProfile.profile_json`. Generic: works against any
+target domain.
 
-Perfil devuelto (todas las claves siempre presentes):
+Returned profile (all keys always present):
     {
-      "paths":          [...],  # directorios observados ("/app/", "/account/")
-      "api_prefixes":   [...],  # prefijos de API ("/api/v2", "/graphql")
-      "resource_names": [...],  # nombres de recursos hoja ("login", "app.js")
+      "paths":          [...],  # observed directories ("/app/", "/account/")
+      "api_prefixes":   [...],  # API prefixes ("/api/v2", "/graphql")
+      "resource_names": [...],  # leaf resource names ("login", "app.js")
       "tech_stack":     {...},  # tech detectada -> evidencia ("react": "html")
-      "vocabulary":     [...],  # segmentos/palabras del dominio (vocabulario)
-      "server_banner":  "...",  # cabecera Server real (o "nginx" por defecto)
-      "title":          "...",  # <title> de la primera pagina HTML
+      "vocabulary":     [...],  # domain segments/words (vocabulary)
+      "server_banner":  "...",  # real Server header (or "nginx" by default)
+      "title":          "...",  # <title> of the first HTML page
     }
 """
 
@@ -28,22 +28,22 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
-# --------------------------- limites y constantes ---------------------------
+# --------------------------- limits and constants ---------------------------
 
 _USER_AGENT = "Mozilla/5.0 (compatible; MoqeshProfiler/1.0)"
-_MAX_BYTES = 2_000_000  # tope de cuerpo leido por pagina (anti-OOM)
+_MAX_BYTES = 2_000_000  # cap on body bytes read per page (anti-OOM)
 _MAX_PATHS = 40
 _MAX_API = 10
 _MAX_RESOURCES = 40
 _MAX_VOCAB = 60
 _MAX_TECH = 12
-_SEG_MIN, _SEG_MAX = 3, 24  # longitud de segmento valido para vocabulario
-_LEAF_MAX = 48  # longitud maxima de un nombre de recurso
+_SEG_MIN, _SEG_MAX = 3, 24  # valid segment length for vocabulary
+_LEAF_MAX = 48  # max length of a resource name
 
-# Esquemas de enlace que se ignoran (no son paginas navegables).
+# Link schemes that are ignored (not navigable pages).
 _SKIP_SCHEMES = ("mailto:", "tel:", "javascript:", "data:", "blob:", "about:")
 
-# Pistas de stack: aguja (en HTML, minusculas) -> nombre normalizado.
+# Stack hints: needle (in lowercase HTML) -> normalized name.
 _TECH_NEEDLES: tuple[tuple[str, str], ...] = (
     ("__next_data__", "next.js"),
     ("data-reactroot", "react"),
@@ -71,7 +71,7 @@ _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 
 
 class _HtmlScan(HTMLParser):
-    """Extrae enlaces (href/src/action) y el <title>. Tolerante a HTML roto."""
+    """Extract links (href/src/action) and the <title>. Tolerant of broken HTML."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -91,7 +91,7 @@ class _HtmlScan(HTMLParser):
             self._in_title = False
 
     def handle_data(self, data: str) -> None:
-        # Solo el primer <title>; puede llegar en varios trozos.
+        # Only the first <title>; it may arrive in several chunks.
         if self._in_title and not self.title:
             text = data.strip()
             if text:
@@ -106,20 +106,20 @@ def _is_http(url: str) -> bool:
 
 
 def _normalize(url: str) -> str:
-    """Canonicaliza para dedupe: baja esquema/host y descarta query y fragmento."""
+    """Canonicalize for dedupe: lowercase scheme/host and drop query and fragment."""
     p = urlparse(url)
     return urlunparse((p.scheme.lower(), p.netloc.lower(), p.path or "/", "", "", ""))
 
 
 def _dir_of(path: str) -> str:
-    """Directorio contenedor de una ruta ("/a/b/c" -> "/a/b/"); "/" si es raiz."""
+    """Containing directory of a path ("/a/b/c" -> "/a/b/"); "/" if it is the root."""
     p = path.rstrip("/")
     idx = p.rfind("/")
     return "/" if idx <= 0 else p[: idx + 1]
 
 
 def _leaf_of(path: str) -> str:
-    """Ultimo segmento (nombre de recurso); "" si la ruta es un directorio."""
+    """Last segment (resource name); "" if the path is a directory."""
     if path.endswith("/"):
         return ""
     idx = path.rfind("/")
@@ -135,7 +135,7 @@ def _api_prefix(path: str) -> str:
 
 
 class _OrderedSet:
-    """Conjunto ordenado por insercion con tope; ignora extras una vez lleno."""
+    """Insertion-ordered set with a cap; ignores extras once full."""
 
     def __init__(self, limit: int) -> None:
         self._data: dict[str, None] = {}
@@ -153,8 +153,8 @@ class _OrderedSet:
 
 
 async def _fetch_html(client: httpx.AsyncClient, url: str) -> tuple[httpx.Response, str | None]:
-    """Descarga una pagina. Devuelve (respuesta, html) o (respuesta, None) si no
-    es HTML. Lee como mucho `_MAX_BYTES` para acotar memoria."""
+    """Download a page. Returns (response, html) or (response, None) if it is not
+    HTML. Reads at most `_MAX_BYTES` to bound memory."""
     async with client.stream("GET", url) as resp:
         ctype = resp.headers.get("content-type", "").lower()
         if "html" not in ctype:
@@ -180,12 +180,12 @@ async def _fetch_html(client: httpx.AsyncClient, url: str) -> tuple[httpx.Respon
 async def profile_site(
     target_url: str, *, max_pages: int = 40, timeout: float = 10.0, same_origin: bool = True
 ) -> dict:
-    """Perfila (read-only) un sitio real para el modo Mimic.
+    """Profile (read-only) a real site for Mimic mode.
 
-    Hace un crawl BFS acotado desde `target_url`: como mucho `max_pages` paginas,
-    `timeout` segundos por peticion, sin salir del host salvo que `same_origin`
-    sea False. Nunca lanza por errores de red/HTML: en el peor caso devuelve un
-    perfil parcial (o vacio con banner "nginx").
+    Does a bounded BFS crawl from `target_url`: at most `max_pages` pages,
+    `timeout` seconds per request, without leaving the host unless `same_origin`
+    is False. Never raises on network/HTML errors: at worst it returns a
+    partial profile (or an empty one with the "nginx" banner).
     """
     base = urlparse(target_url)
     paths = _OrderedSet(_MAX_PATHS)
@@ -196,7 +196,7 @@ async def profile_site(
     server_banner = ""
     title = ""
 
-    # URL objetivo invalida: perfil vacio pero bien formado.
+    # Invalid target URL: empty but well-formed profile.
     if base.scheme not in ("http", "https") or not base.netloc:
         return _build(paths, api, resources, vocab, tech, server_banner, title)
 
@@ -220,10 +220,10 @@ async def profile_site(
                 try:
                     resp, html = await _fetch_html(client, url)
                 except (httpx.HTTPError, OSError):
-                    pages += 1  # cuenta el intento para no colgarse en un host muerto
+                    pages += 1  # count the attempt so a dead host does not hang us
                     continue
 
-                # Cabeceras: solo de la primera respuesta exitosa.
+                # Headers: only from the first successful response.
                 if not headers_done:
                     headers_done = True
                     sv = resp.headers.get("server", "").strip()
@@ -237,7 +237,7 @@ async def profile_site(
                 if html is None:
                     continue
 
-                # Primera pagina HTML: titulo y deteccion de stack.
+                # First HTML page: title and stack detection.
                 if not html_done:
                     html_done = True
                     scan_title, lower = _scan_meta(html)
@@ -248,7 +248,7 @@ async def profile_site(
                         if needle in lower and len(tech) < _MAX_TECH:
                             tech.setdefault(name, "html")
 
-                # Extraccion de enlaces y vocabulario.
+                # Link and vocabulary extraction.
                 for raw in _links(html):
                     abs_url = _resolve(url, raw)
                     if abs_url is None:
@@ -256,7 +256,7 @@ async def profile_site(
                     pu = urlparse(abs_url)
                     on_host = pu.netloc.lower() == base_host
                     if not on_host and same_origin:
-                        continue  # fuera del origen: no seguir ni registrar
+                        continue  # off-origin: do not follow or record
 
                     path = pu.path or "/"
                     d = _dir_of(path)
@@ -271,22 +271,22 @@ async def profile_site(
                     if _API_RE.search(path):
                         api.add(_api_prefix(path))
 
-                    # Encolar nuevas paginas navegables (sin extension de archivo).
+                    # Enqueue new navigable pages (no file extension).
                     if (on_host or not same_origin) and "." not in leaf and len(queue) < max_pages * 4:
                         norm = _normalize(abs_url)
                         if norm not in seen:
                             queue.append(norm)
     except Exception:
-        # Ultima red de seguridad: devolvemos lo acumulado hasta el fallo.
+        # Last safety net: return what was accumulated up to the failure.
         pass
 
     return _build(paths, api, resources, vocab, tech, server_banner, title)
 
 
 def profile_site_sync(target_url: str, *, max_pages: int = 40, timeout: float = 10.0, same_origin: bool = True) -> dict:
-    """Envoltura sincrona de `profile_site` para contextos no-async (CLI, tests).
+    """Synchronous wrapper of `profile_site` for non-async contexts (CLI, tests).
 
-    No usar dentro de un event loop ya en marcha (usar `profile_site` directamente).
+    Do not use inside an already running event loop (use `profile_site` directly).
     """
     return asyncio.run(profile_site(target_url, max_pages=max_pages, timeout=timeout, same_origin=same_origin))
 
@@ -295,18 +295,18 @@ def profile_site_sync(target_url: str, *, max_pages: int = 40, timeout: float = 
 
 
 def _links(html: str) -> list[str]:
-    """Devuelve los enlaces del HTML; tolera documentos malformados."""
+    """Return the HTML's links; tolerates malformed documents."""
     parser = _HtmlScan()
     try:
         parser.feed(html)
         parser.close()
     except Exception:
-        pass  # html.parser rara vez lanza, pero no debe tumbar el crawl
+        pass  # html.parser rarely raises, but it must not take down the crawl
     return parser.links
 
 
 def _scan_meta(html: str) -> tuple[str, str]:
-    """Extrae el <title> y devuelve tambien el HTML en minusculas (para stack)."""
+    """Extract the <title> and also return the lowercased HTML (for stack detection)."""
     parser = _HtmlScan()
     try:
         parser.feed(html)
@@ -317,7 +317,7 @@ def _scan_meta(html: str) -> tuple[str, str]:
 
 
 def _resolve(current: str, raw: str) -> str | None:
-    """Resuelve un enlace a URL absoluta http(s); None si no es navegable."""
+    """Resolve a link to an absolute http(s) URL; None if it is not navigable."""
     raw = raw.strip()
     if not raw or raw.startswith("#"):
         return None
@@ -331,7 +331,7 @@ def _resolve(current: str, raw: str) -> str | None:
 
 
 def _harvest_words(text: str, vocab: _OrderedSet) -> None:
-    """Añade al vocabulario las palabras utiles de un texto (p.ej. el titulo)."""
+    """Add a text's useful words (e.g. the title) to the vocabulary."""
     for w in _WORD_RE.findall(text):
         if _SEG_MIN <= len(w) <= _SEG_MAX:
             vocab.add(w.lower())
@@ -346,7 +346,7 @@ def _build(
     server_banner: str,
     title: str,
 ) -> dict:
-    """Ensambla el perfil JSON-serializable con todas las claves presentes."""
+    """Assemble the JSON-serializable profile with all keys present."""
     return {
         "paths": paths.sorted(),
         "api_prefixes": api.sorted(),

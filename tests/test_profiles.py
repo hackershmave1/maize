@@ -1,4 +1,4 @@
-"""Perfiles de sitio seleccionables (Fase 2)."""
+"""Selectable site profiles (Phase 2)."""
 
 from moqesh.labyrinth import LabyrinthGenerator, LabyrinthOptions
 from moqesh.profiles import available, load_builtin
@@ -10,7 +10,7 @@ def test_builtins_available_and_loadable():
     for n in names:
         p = load_builtin(n)
         assert isinstance(p, dict)
-        assert p.get("api_resources"), f"{n} sin api_resources"
+        assert p.get("api_resources"), f"{n} has no api_resources"
 
 
 def test_load_builtin_rejects_bad_names():
@@ -24,9 +24,9 @@ def test_load_builtin_rejects_bad_names():
 def test_profile_api_collections_reachable_others_404():
     gen = LabyrinthGenerator()
     opts = LabyrinthOptions(seed="deploy-1", profile=load_builtin("saas"))
-    assert gen.is_reachable(opts, "/api/v2/tenant")  # recurso del perfil
+    assert gen.is_reachable(opts, "/api/v2/tenant")  # the profile's resource
     assert gen.is_reachable(opts, "/api/v2/invoice")
-    assert not gen.is_reachable(opts, "/api/v2/handbook")  # recurso de OTRO tema -> 404
+    assert not gen.is_reachable(opts, "/api/v2/handbook")  # a resource of ANOTHER theme -> 404
     assert not gen.is_reachable(opts, "/api/v2/zzz")
 
 
@@ -48,7 +48,7 @@ def test_profile_theme_and_banner():
 
 
 def test_profile_record_name_matches_collection():
-    # El nombre del registro deriva de la colección del perfil (coherencia visible).
+    # The record name derives from the profile's collection (visible coherence).
     import json
 
     gen = LabyrinthGenerator()

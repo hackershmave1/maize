@@ -1,8 +1,8 @@
-"""Schemas Pydantic (contrato del frontend).
+"""Pydantic schemas (the frontend contract).
 
-Campos en snake_case; el alias camelCase se genera solo (`to_camel`), de modo
-que el JSON que consume el React sale en camelCase sin construir dicts a mano.
-Las fechas se emiten en ISO-8601 UTC con sufijo `Z`.
+Fields in snake_case; the camelCase alias is generated automatically (`to_camel`), so
+the JSON the React app consumes comes out in camelCase without building dicts by hand.
+Dates are emitted in ISO-8601 UTC with a `Z` suffix.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def _iso_z(dt: datetime) -> str:
     return dt.isoformat() + "Z"
 
 
-# datetime que siempre serializa como UTC con 'Z' (el navegador lo interpreta bien).
+# A datetime that always serializes as UTC with 'Z' (the browser parses it correctly).
 UtcDateTime = Annotated[datetime, PlainSerializer(_iso_z, return_type=str)]
 
 
@@ -66,7 +66,7 @@ class DashboardOverview(CamelModel):
     recent_alerts: list[AlertSummary]
 
 
-# ---------------- Sesiones / requests ----------------
+# ---------------- Sessions / requests ----------------
 
 
 class SessionDto(CamelModel):
@@ -147,7 +147,7 @@ class TokenExhaustOverview(CamelModel):
     by_model: list[ModelAttributionEntry]
 
 
-# ---------------- Honeypots / reglas / blocks ----------------
+# ---------------- Honeypots / rules / blocks ----------------
 
 
 class HoneypotDto(CamelModel):
@@ -262,7 +262,7 @@ class BlockRequest(CamelModel):
     reason: str | None = None
 
 
-# ---------------- Sensores ----------------
+# ---------------- Sensors ----------------
 
 
 class SensorDto(CamelModel):
@@ -300,7 +300,7 @@ class CreateSensorRequest(CamelModel):
 
 
 class SensorCreated(CamelModel):
-    """Respuesta de alta: el secreto y el comando se muestran UNA sola vez."""
+    """Enrollment response: the secret and the command are shown ONCE."""
 
     id: int
     name: str

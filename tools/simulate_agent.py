@@ -1,6 +1,6 @@
-"""Simula un agente IA recorriendo el laberinto (sigue enlaces, baja en profundidad,
-lee README y luego el .env, descarga binarios). Usa un UA de bot para disparar
-reglas conductuales. No es parte del producto: es el arnes de la prueba e2e.
+"""Simulate an AI agent walking the labyrinth (follows links, goes deep,
+reads the README and then the .env, downloads binaries). Uses a bot UA to fire
+behavioral rules. Not part of the product: it is the e2e test harness.
 """
 import os
 import re
@@ -29,7 +29,7 @@ def main() -> None:
     frontier = ["/"]
     seen = set()
     hits = 0
-    # BFS/DFS mezclado: sigue casi todos los enlaces (fan-out exhaustivo) y baja hondo.
+    # Mixed BFS/DFS: follows nearly every link (exhaustive fan-out) and goes deep.
     while frontier and hits < 40:
         path = frontier.pop(0)
         if path in seen:
@@ -37,14 +37,14 @@ def main() -> None:
         seen.add(path)
         r = client.get(BASE + path)
         hits += 1
-        time.sleep(0.4)  # intervalo regular -> dispara timing_analysis
+        time.sleep(0.4)  # regular interval -> fires timing_analysis
         ct = r.headers.get("content-type", "")
         if "html" in ct:
             found = links(r.text, path)
-            # Sigue TODO lo listado (comportamiento de agente, no de humano).
+            # Follows EVERYTHING listed (agent behavior, not human).
             frontier.extend(found)
         print(f"{r.status_code}  {path:45.45}  {len(r.content):>7}b  {ct.split(';')[0]}")
-    print(f"\nTotal requests del agente simulado: {hits}")
+    print(f"\nTotal requests from the simulated agent: {hits}")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
-"""Pipeline central de detección (una sola fuente de verdad).
+"""Central detection pipeline (a single source of truth).
 
-Lo usan por igual el honeypot local y los endpoints de ingestión remota: dada una
-petición observada (servida localmente o reportada por un sensor), gestiona la
-sesión por `(sensor_id, source_ip)`, registra el `RequestLog`, puntúa con las
-reglas conductuales (+ señales de escenario) y levanta la alerta. Los efectos
-async (webhook de bloqueo, confirmación IA, broadcast) los decide el llamador.
+Used alike by the local honeypot and the remote ingestion endpoints: given an
+observed request (served locally or reported by a sensor), it manages the
+session by `(sensor_id, source_ip)`, records the `RequestLog`, scores it with the
+behavioral rules (+ scenario signals) and raises the alert. The async
+effects (block webhook, AI confirmation, broadcast) are decided by the caller.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from .models import AgentSession, Alert, DetectionRule, RequestLog, utcnow
 
 _gen = LabyrinthGenerator()
 
-# Firma: (db, session_id, ordered_paths) -> dict[regla_fuerte -> bool].
+# Signature: (db, session_id, ordered_paths) -> dict[strong_rule -> bool].
 SignalsFn = Callable[[Session, int, list[str]], dict[str, bool]]
 
 
@@ -132,11 +132,11 @@ def score_and_record(
                 session_id=session.id,
                 sensor_id=sensor_id,
                 severity=severity,
-                title=f"Posible AI agent detectado desde {source_ip}",
+                title=f"Possible AI agent detected from {source_ip}",
                 description=(
-                    f"Score: {score:.2f}. Reglas: {session.matched_rules}. "
+                    f"Score: {score:.2f}. Rules: {session.matched_rules}. "
                     f"Requests: {session.request_count}. "
-                    f"Tokens estimados quemados: {session.tokens_estimated}."
+                    f"Estimated tokens burned: {session.tokens_estimated}."
                 ),
                 triggered_rules=session.matched_rules,
             )

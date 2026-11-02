@@ -34,7 +34,7 @@ export function TopSources({ data }: Props) {
           </div>
         ))}
         {data.length === 0 && (
-          <p className="text-sm text-fg-muted text-center py-4">Sin datos aún</p>
+          <p className="text-sm text-fg-muted text-center py-4">No data yet</p>
         )}
       </div>
     </div>

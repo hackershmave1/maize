@@ -1,6 +1,6 @@
-"""Orquestación del worldsmith: corre un proveedor en un staging, re-valida TODO el árbol
-(gate final de inertness) y, solo si está limpio, publica atómicamente al World e importa el
-pack de cebo. El World en vivo nunca se toca hasta que el build pasa la validación completa.
+"""Worldsmith orchestration: runs a provider in a staging dir, re-validates the ENTIRE tree
+(final inertness gate) and, only if clean, atomically publishes to the World and imports the
+lure pack. The live World is never touched until the build passes full validation.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ logger = logging.getLogger("moqesh.worldsmith")
 
 
 def _publish(staging: str, world_path: str) -> None:
-    """Swap atómico: staging (hermano del world_path) pasa a ser el World; el anterior va a .prev."""
+    """Atomic swap: staging (a sibling of world_path) becomes the World; the previous one goes to .prev."""
     world_path = os.path.abspath(world_path)
     prev = world_path + ".prev"
     if os.path.exists(prev):
         shutil.rmtree(prev, ignore_errors=True)
     if os.path.exists(world_path):
-        os.replace(world_path, prev)  # atómico en el mismo FS
+        os.replace(world_path, prev)  # atomic on the same FS
     os.replace(staging, world_path)
 
 
@@ -41,9 +41,9 @@ def build_world(
     activate: bool = True,
     seed_from_current: bool = False,
 ) -> dict:
-    """Construye (o evoluciona) el World con el proveedor dado y lo publica si valida.
+    """Build (or evolve) the World with the given provider and publish it if it validates.
 
-    Devuelve un reporte. Si la validación final falla, NO publica y deja el World en vivo intacto.
+    Returns a report. If final validation fails, it does NOT publish and leaves the live World intact.
     """
     world_path = os.path.abspath(world_path)
     os.makedirs(os.path.dirname(world_path) or ".", exist_ok=True)
@@ -52,7 +52,7 @@ def build_world(
         shutil.rmtree(staging, ignore_errors=True)
     os.makedirs(staging, exist_ok=True)
 
-    # Evolución: parte de una copia del World actual para que el agente lo modifique.
+    # Evolution: start from a copy of the current World so the agent modifies it.
     if seed_from_current and os.path.isfile(os.path.join(world_path, "manifest.json")):
         for item in os.listdir(world_path):
             src = os.path.join(world_path, item)
@@ -68,20 +68,20 @@ def build_world(
         profile=profile,
         goal=goal,
         portals=portals,
-        extra="Estás EVOLUCIONANDO un World existente: rota el cebo, refresca mock data y añade/varía un portal."
+        extra="You are EVOLVING an existing World: rotate the lure, refresh mock data and add/vary a portal."
         if seed_from_current
         else "",
     )
     prov_result = provider.build(sandbox, SYSTEM_PROMPT, brief)
 
-    # Gate final de inertness: re-valida TODO el árbol en disco (no confía en las herramientas).
+    # Final inertness gate: re-validate the ENTIRE tree on disk (does not trust the tools).
     problems = validate_tree(staging)
     if problems:
         shutil.rmtree(staging, ignore_errors=True)
         return {
             "ok": False,
             "published": False,
-            "error": "la validación final de inertness falló; World en vivo intacto",
+            "error": "final inertness validation failed; live World intact",
             "problems": problems[:50],
             "provider_result": prov_result,
         }
@@ -94,8 +94,8 @@ def build_world(
         "files": sandbox_file_count(world_path),
         "bait": None,
         "provider_result": prov_result,
-        "note": "Reinicia/recarga el proceso del honeypot para que sirva el World nuevo "
-        "(World se carga al arrancar).",
+        "note": "Restart/reload the honeypot process so it serves the new World "
+        "(the World is loaded at startup).",
     }
 
     if import_bait and sandbox.bait_pack is not None:
@@ -104,7 +104,7 @@ def build_world(
 
 
 def import_bait_pack(pack: dict, *, activate: bool = True) -> dict:
-    """Importa el pack de cebo producido por el agente como escenario activo."""
+    """Import the lure pack produced by the agent as the active scenario."""
     try:
         from ..db import SessionLocal
         from ..scenarios import import_pack
@@ -118,8 +118,8 @@ def import_bait_pack(pack: dict, *, activate: bool = True) -> dict:
                 "active": s.is_active,
                 "nodes": len(pack.get("nodes", [])),
             }
-    except Exception as e:  # no tumbar el build publicado por un fallo de import
-        logger.warning("[worldsmith] import del pack de cebo falló: %s", e)
+    except Exception as e:  # do not take down the published build over an import failure
+        logger.warning("[worldsmith] lure pack import failed: %s", e)
         return {"ok": False, "error": str(e)}
 
 

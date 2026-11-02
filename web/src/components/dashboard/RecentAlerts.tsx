@@ -15,7 +15,7 @@ const severityConfig: Record<string, { icon: typeof AlertTriangle; class: string
 export function RecentAlerts({ data }: Props) {
   return (
     <div className="bg-surface rounded-lg border border-border p-5">
-      <h3 className="text-sm font-medium text-fg-muted mb-4">Alertas recientes</h3>
+      <h3 className="text-sm font-medium text-fg-muted mb-4">Recent alerts</h3>
       <div className="space-y-2">
         {data.map(alert => {
           const config = severityConfig[alert.severity] || severityConfig.Low;
@@ -41,7 +41,7 @@ export function RecentAlerts({ data }: Props) {
           );
         })}
         {data.length === 0 && (
-          <p className="text-sm text-fg-muted text-center py-6">Sin alertas</p>
+          <p className="text-sm text-fg-muted text-center py-6">No alerts</p>
         )}
       </div>
     </div>

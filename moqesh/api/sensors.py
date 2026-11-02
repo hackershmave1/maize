@@ -1,4 +1,4 @@
-"""Router de gestión de sensores (dashboard): alta, estado, control y onboarding."""
+"""Sensor management router (dashboard): enrollment, status, control and onboarding."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from ..schemas import CreateSensorRequest, SensorBundleDto, SensorCreated, Senso
 
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
-# Un sensor se considera online si latió hace menos de esto.
+# A sensor counts as online if it sent a heartbeat more recently than this.
 _ONLINE_WINDOW_S = 180
 
 
@@ -64,7 +64,7 @@ def list_sensors(db: Session = Depends(get_session)) -> list[SensorDto]:
 @router.post("", response_model=SensorCreated, status_code=201)
 def create_sensor(body: CreateSensorRequest, db: Session = Depends(get_session)) -> SensorCreated:
     if body.kind not in ("agent", "agentless"):
-        raise HTTPException(status_code=400, detail="kind debe ser 'agent' o 'agentless'")
+        raise HTTPException(status_code=400, detail="kind must be 'agent' or 'agentless'")
     key_id, secret = security.new_credentials()
     token = uuid.uuid4().hex
     s = Sensor(
@@ -101,7 +101,7 @@ def create_sensor(body: CreateSensorRequest, db: Session = Depends(get_session))
 def get_sensor(sensor_id: int, db: Session = Depends(get_session)) -> SensorDto:
     s = db.get(Sensor, sensor_id)
     if s is None or s.retired:
-        raise HTTPException(status_code=404, detail="sensor no encontrado")
+        raise HTTPException(status_code=404, detail="sensor not found")
     return _to_dto(db, s)
 
 
@@ -193,9 +193,9 @@ def list_bundles(sensor_id: int, db: Session = Depends(get_session)) -> list[Sen
 def generate_bundles(sensor_id: int, count: int = 3, db: Session = Depends(get_session)) -> list[SensorBundleDto]:
     s = _require(db, sensor_id)
     try:
-        from .. import bundles  # módulo del generador (entrega aparte)
+        from .. import bundles  # generator module (delivered separately)
     except ImportError as exc:
-        raise HTTPException(status_code=501, detail="generador de bundles no disponible") from exc
+        raise HTTPException(status_code=501, detail="bundle generator not available") from exc
     created = bundles.generate_for_sensor(db, s, count=count)
     return [SensorBundleDto.model_validate(b) for b in created]
 
@@ -203,5 +203,5 @@ def generate_bundles(sensor_id: int, count: int = 3, db: Session = Depends(get_s
 def _require(db: Session, sensor_id: int) -> Sensor:
     s = db.get(Sensor, sensor_id)
     if s is None or s.retired:
-        raise HTTPException(status_code=404, detail="sensor no encontrado")
+        raise HTTPException(status_code=404, detail="sensor not found")
     return s

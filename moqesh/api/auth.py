@@ -1,8 +1,8 @@
-"""Autenticación del dashboard: login/logout/me + dependencia `require_user`.
+"""Dashboard authentication: login/logout/me + the `require_user` dependency.
 
-Protege los routers del dashboard (`/api/*`) con una sesión por cookie firmada.
-NO toca el canal de sensores (`/ingest/*`, `/control`, `/s/*`, `/download/*`,
-`/healthz`), que conserva su propia autenticación HMAC.
+Protects the dashboard routers (`/api/*`) with a signed cookie session.
+Does NOT touch the sensor channel (`/ingest/*`, `/control`, `/s/*`, `/download/*`,
+`/healthz`), which keeps its own HMAC authentication.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ..security import RateLimiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Rate-limit del login por IP (anti fuerza bruta): ~20/min, ráfaga 10.
+# Per-IP login rate limit (anti brute force): ~20/min, burst 10.
 _login_limiter = RateLimiter(per_minute=20, burst=10)
 
 
@@ -37,7 +37,7 @@ def _client_ip(request: Request) -> str:
 
 
 def require_user(request: Request) -> dict:
-    """Dependencia de guarda: exige una sesión válida o devuelve 401."""
+    """Guard dependency: requires a valid session or returns 401."""
     data = auth.read_token(request.cookies.get(auth.cookie_name()))
     if data is None:
         raise HTTPException(status_code=401, detail="no autenticado")
@@ -47,13 +47,13 @@ def require_user(request: Request) -> dict:
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(get_session)) -> dict:
     if not _login_limiter.allow(_client_ip(request)):
-        raise HTTPException(status_code=429, detail="demasiados intentos; espera un momento")
+        raise HTTPException(status_code=429, detail="too many attempts; wait a moment")
     user = db.scalar(select(User).where(User.username == body.username).limit(1))
-    # Verifica SIEMPRE (incluso sin usuario, contra un hash señuelo de iteraciones reales)
-    # para no filtrar por tiempo si el usuario existe o no.
+    # ALWAYS verify (even with no user, against a decoy hash with real iterations)
+    # so timing does not leak whether the user exists.
     stored = user.password_hash if user else auth.dummy_hash()
     if not auth.verify_password(body.password, stored) or user is None:
-        raise HTTPException(status_code=401, detail="credenciales inválidas")
+        raise HTTPException(status_code=401, detail="invalid credentials")
     auth.touch_last_login(db, user)
     token = auth.make_token({"uid": user.id, "username": user.username, "role": user.role},
                             max_age=settings.session_max_age)

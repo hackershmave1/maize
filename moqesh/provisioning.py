@@ -1,7 +1,7 @@
-"""Generación server-side de scripts e instrucciones de instalación.
+"""Server-side generation of install scripts and instructions.
 
-Todo lo que el usuario pega en su servidor sale de aquí, con la clave y la URL ya
-embebidas. El onboarding es: crear sensor → copiar un comando → ✓ conectado.
+Everything the user pastes on their server comes from here, with the key and URL already
+embedded. Onboarding is: create sensor -> copy one command -> connected.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ def server_url() -> str:
 
 
 def one_command(token: str) -> str:
-    """Comando principal (curl | sh) para el asistente."""
+    """Main command (curl | sh) for the wizard."""
     return f"curl -fsSL {server_url()}/s/{token} | sh"
 
 
 def inspect_command(token: str) -> str:
-    """Alternativa 'inspeccionar primero': descargar + ver checksum antes de ejecutar."""
+    """'Inspect first' alternative: download + check the checksum before running."""
     url = f"{server_url()}/s/{token}"
     return (
         f"curl -fsSL {url} -o moqesh-install.sh && sha256sum moqesh-install.sh "
@@ -28,11 +28,11 @@ def inspect_command(token: str) -> str:
 
 
 def agent_install_script(key_id: str, secret: str) -> str:
-    """Script POSIX que instala el agente como binario autocontenido + servicio."""
+    """POSIX script that installs the agent as a self-contained binary + service."""
     srv = server_url()
     return f"""#!/bin/sh
 set -eu
-# Instalador del agente Moqesh. Revisa este script antes de ejecutarlo.
+# Moqesh agent installer. Review this script before running it.
 SERVER="{srv}"
 KEY_ID="{key_id}"
 SECRET="{secret}"
@@ -49,9 +49,9 @@ DIR="${{MOQESH_DIR:-/opt/moqesh}}"
 mkdir -p "$DIR"
 echo "[moqesh] preflight: probando conectividad a $SERVER ..."
 if ! curl -fsS -o /dev/null "$SERVER/healthz"; then
-  echo "[moqesh] ERROR: no se alcanza $SERVER. Abre egress HTTPS hacia ese host."; exit 1
+  echo "[moqesh] ERROR: cannot reach $SERVER. Open HTTPS egress to that host."; exit 1
 fi
-echo "[moqesh] descargando agente ($OS/$ARCH) ..."
+echo "[moqesh] downloading agent ($OS/$ARCH) ..."
 curl -fsSL "$SERVER/download/agent/$OS-$ARCH" -o "$DIR/moqesh-agent"
 chmod +x "$DIR/moqesh-agent"
 cat > "$DIR/agent.env" <<EOF
@@ -74,15 +74,15 @@ Restart=always
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload && systemctl enable --now moqesh-agent
-  echo "[moqesh] agente instalado y arrancado (servicio systemd)."
+  echo "[moqesh] agent installed and started (systemd service)."
 else
-  echo "[moqesh] sin systemd; arranca manualmente: env \\$(cat $DIR/agent.env) $DIR/moqesh-agent &"
+  echo "[moqesh] no systemd; start it manually: env \\$(cat $DIR/agent.env) $DIR/moqesh-agent &"
 fi
 """
 
 
 def agentless_steps(sensor_id: int, key_id: str, secret: str, base_path: str, bundle_count: int) -> dict:
-    """Pasos y snippets para el modo sin instalación (ZIP + cron)."""
+    """Steps and snippets for the no-install mode (ZIP + cron)."""
     srv = server_url()
     cron = (
         f"*/5 * * * * MOQESH_SERVER={srv} MOQESH_KEY_ID={key_id} MOQESH_SECRET={secret} "
@@ -90,14 +90,14 @@ def agentless_steps(sensor_id: int, key_id: str, secret: str, base_path: str, bu
     )
     return {
         "steps": [
-            f"Descarga el script de envío: curl -fsSL {srv}/download/shipper/{sensor_id} "
+            f"Download the shipping script: curl -fsSL {srv}/download/shipper/{sensor_id} "
             "-o /opt/moqesh/moqesh-ship.sh && chmod +x /opt/moqesh/moqesh-ship.sh",
-            f"Descarga y descomprime los {bundle_count} bundles donde quieras servir el cebo "
-            f"(bajo {base_path}). Enlaces en la pestaña del sensor.",
-            "Aplica la config de servido seguro (texto plano, sin ejecución) que te damos por tipo de web server.",
-            "Añade la tarea programada (cron) de abajo para enviar los logs del cebo.",
+            f"Download and unpack the {bundle_count} bundles wherever you want to serve the lure "
+            f"(under {base_path}). Links are in the sensor's tab.",
+            "Apply the safe-serving config (plain text, no execution) we provide per web server type.",
+            "Add the scheduled task (cron) below to ship the lure's logs.",
         ],
         "cron": cron,
         "shipper_url": f"{srv}/download/shipper/{sensor_id}",
-        "note": "El script solo envía líneas de log que casen el prefijo del cebo; haz un dry-run antes.",
+        "note": "The script only ships log lines matching the lure prefix; do a dry run first.",
     }

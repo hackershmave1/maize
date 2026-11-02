@@ -1,69 +1,69 @@
-# Moqesh - Shippers agentless
+# Moqesh - Agentless shippers
 
-Scripts de envío (shipper) **sin instalación de software pesado**. Corren por
-cron (POSIX) o Tarea Programada (Windows), leen el access log del web server, se
-quedan **solo con las líneas que casan el prefijo del cebo** y las envían
-firmadas (HMAC) al servidor Moqesh.
+Shipping scripts **with no heavy software to install**. They run from
+cron (POSIX) or a Scheduled Task (Windows), read the web server's access log,
+keep **only the lines that match the lure prefix** and send them
+signed (HMAC) to the Moqesh server.
 
-- `moqesh-ship.sh` — POSIX `sh`. Necesita solo `curl`, `openssl` y `awk`.
-- `moqesh-ship.ps1` — PowerShell 5+ (Windows), sin dependencias externas.
+- `moqesh-ship.sh`: POSIX `sh`. Needs only `curl`, `openssl` and `awk`.
+- `moqesh-ship.ps1`: PowerShell 5+ (Windows), no external dependencies.
 
-Ambos son **idempotentes** (un byte-offset del log evita reenvíos; el servidor
-además deduplica) y **nunca** modifican ni borran el log de origen.
+Both are **idempotent** (a byte offset into the log avoids resends; the server
+also deduplicates) and **never** modify or delete the source log.
 
-## Privacidad
+## Privacy
 
-El script envía **únicamente** las líneas cuyo contenido incluye
-`MOQESH_BASE_PATH` (el prefijo del cebo). El tráfico real de los usuarios nunca
-sale del host. Por eso `MOQESH_BASE_PATH` es obligatorio: sin prefijo se enviaría
-todo el log, y el script se niega a ejecutarse.
+The script sends **only** the lines whose content includes
+`MOQESH_BASE_PATH` (the lure prefix). Real user traffic never
+leaves the host. That is why `MOQESH_BASE_PATH` is required: without a prefix the whole
+log would be sent, so the script refuses to run.
 
-## Variables de entorno
+## Environment variables
 
-| Variable           | Req. | Descripción                                                        |
-|--------------------|:----:|--------------------------------------------------------------------|
-| `MOQESH_SERVER`    |  sí  | URL base del servidor Moqesh (p.ej. `https://moqesh.example.com`). |
-| `MOQESH_KEY_ID`    |  sí  | Identificador de clave del sensor.                                 |
-| `MOQESH_SECRET`    |  sí  | Secreto HMAC del sensor (mantener privado).                        |
-| `MOQESH_LOG`       |  sí  | Ruta del access log (p.ej. `/var/log/nginx/access.log`).           |
-| `MOQESH_BASE_PATH` |  sí  | Prefijo del cebo (p.ej. `/lure`).                                  |
-| `MOQESH_FORMAT`    |  no  | `nginx` \| `apache` \| `caddy` \| `json` \| `raw`. Def. `nginx`.   |
-| `MOQESH_STATE`     |  no  | Fichero de offset. Def. junto al script, único por ruta de log.    |
-| `MOQESH_DRY_RUN`   |  no  | `1` = imprime lo que enviaría y sale (no toca la red ni el offset). |
+| Variable           | Req. | Description                                                         |
+|--------------------|:----:|---------------------------------------------------------------------|
+| `MOQESH_SERVER`    | yes  | Base URL of the Moqesh server (e.g. `https://moqesh.example.com`).  |
+| `MOQESH_KEY_ID`    | yes  | The sensor's key identifier.                                        |
+| `MOQESH_SECRET`    | yes  | The sensor's HMAC secret (keep it private).                         |
+| `MOQESH_LOG`       | yes  | Path to the access log (e.g. `/var/log/nginx/access.log`).          |
+| `MOQESH_BASE_PATH` | yes  | Lure prefix (e.g. `/lure`).                                         |
+| `MOQESH_FORMAT`    |  no  | `nginx` \| `apache` \| `caddy` \| `json` \| `raw`. Default `nginx`. |
+| `MOQESH_STATE`     |  no  | Offset file. Default: next to the script, unique per log path.      |
+| `MOQESH_DRY_RUN`   |  no  | `1` = print what would be sent and exit (touches neither the network nor the offset). |
 
-## Comportamiento
+## Behavior
 
-1. **Offset + rotación**: guarda el byte-offset leído. Si el tamaño actual del
-   log es menor que el offset guardado (rotación/truncado), reinicia a `0`. Solo
-   se leen las líneas nuevas desde el offset. La última línea sin `\n` (posible
-   escritura a medias) se deja pendiente para la siguiente ejecución.
-2. **Filtrado** por `MOQESH_BASE_PATH` (ver *Privacidad*).
-3. **`GET /control`** firmado. Se **verifica la firma del servidor**
-   (`X-Moqesh-Server-Signature`) antes de confiar en la respuesta; si no casa, se
-   aborta sin enviar (protección anti-MITM).
-4. Si `enabled=false`: **no se envía y NO se avanza el offset** (decisión de
-   diseño), para no perder líneas del cebo al reactivar el sensor. Entretanto el
-   script vuelve a leer esas mismas líneas en cada ejecución, pero **no salen del
-   host** hasta que el sensor se reactiva.
-5. **`POST /ingest/logs`** firmado, en lotes de hasta **20 000 líneas** por envío.
-   El offset solo avanza tras el éxito de **todos** los lotes.
-6. Las líneas que no casan el prefijo (tráfico real) sí hacen avanzar el offset
-   para no reescanearlas, pero nunca se envían.
+1. **Offset + rotation**: stores the byte offset read so far. If the log's current
+   size is smaller than the stored offset (rotation/truncation), it resets to `0`. Only
+   the new lines since the offset are read. The last line without `\n` (possibly
+   half-written) is left pending for the next run.
+2. **Filtering** by `MOQESH_BASE_PATH` (see *Privacy*).
+3. Signed **`GET /control`**. The **server's signature is verified**
+   (`X-Moqesh-Server-Signature`) before trusting the response; if it does not match, the
+   script aborts without sending (anti-MITM protection).
+4. If `enabled=false`: **nothing is sent and the offset is NOT advanced** (a design
+   decision), so lure lines are not lost when the sensor is re-enabled. Meanwhile the
+   script re-reads those same lines on every run, but they **do not leave the
+   host** until the sensor is re-enabled.
+5. Signed **`POST /ingest/logs`**, in batches of up to **20,000 lines** per send.
+   The offset only advances after **all** batches succeed.
+6. Lines that do not match the prefix (real traffic) do advance the offset
+   so they are not rescanned, but they are never sent.
 
-### Firma (idéntica a `moqesh/security.py`)
+### Signature (identical to `moqesh/security.py`)
 
 ```
-ts        = <epoch unix con decimales, como string>
-message   = ts + "." + <cuerpo exacto>          # cuerpo vacío en GET /control
+ts        = <unix epoch with decimals, as a string>
+message   = ts + "." + <exact body>             # empty body on GET /control
 signature = "sha256=" + HMAC_SHA256_hex(MOQESH_SECRET, message)
 ```
 
-Cabeceras: `X-Moqesh-Key-Id`, `X-Moqesh-Timestamp`, `X-Moqesh-Signature`.
+Headers: `X-Moqesh-Key-Id`, `X-Moqesh-Timestamp`, `X-Moqesh-Signature`.
 
-## Ejemplo: cron (POSIX, cada 5 minutos)
+## Example: cron (POSIX, every 5 minutes)
 
-Preferible poner los secretos en un fichero de entorno con permisos `600` en vez
-de dejarlos en el crontab:
+It is better to put the secrets in an environment file with `600` permissions instead
+of leaving them in the crontab:
 
 ```sh
 # /opt/moqesh/ship.env   (chmod 600)
@@ -80,16 +80,16 @@ export MOQESH_FORMAT=nginx
 */5 * * * * . /opt/moqesh/ship.env && /opt/moqesh/moqesh-ship.sh >> /var/log/moqesh-ship.log 2>&1
 ```
 
-O todo en una línea (como lo genera el asistente de provisioning):
+Or all on one line (as the provisioning wizard generates it):
 
 ```cron
 */5 * * * * MOQESH_SERVER=https://moqesh.example.com MOQESH_KEY_ID=mq_... MOQESH_SECRET=... MOQESH_LOG=/var/log/nginx/access.log MOQESH_BASE_PATH=/lure /opt/moqesh/moqesh-ship.sh >/dev/null 2>&1
 ```
 
-## Ejemplo: Tarea Programada (Windows, cada 5 minutos)
+## Example: Scheduled Task (Windows, every 5 minutes)
 
 ```powershell
-# Ejecutar una vez como administrador para registrar la tarea.
+# Run once as administrator to register the task.
 $envBlock = @'
 $env:MOQESH_SERVER   = "https://moqesh.example.com"
 $env:MOQESH_KEY_ID   = "mq_xxxxxxxxxxxxxxxx"
@@ -106,14 +106,14 @@ $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
            -RepetitionInterval (New-TimeSpan -Minutes 5)
 Register-ScheduledTask -TaskName "Moqesh Shipper" -Action $action -Trigger $trigger `
-           -RunLevel Highest -Description "Envío agentless de logs del cebo a Moqesh"
+           -RunLevel Highest -Description "Agentless shipping of lure logs to Moqesh"
 ```
 
-> Protege `run-ship.ps1` con ACL restrictiva: contiene el secreto.
+> Protect `run-ship.ps1` with a restrictive ACL: it contains the secret.
 
-## Dry-run
+## Dry run
 
-Siempre haz una prueba en seco antes de programar la tarea:
+Always do a dry run before scheduling the task:
 
 ```sh
 MOQESH_SERVER=https://moqesh.example.com MOQESH_KEY_ID=mq_... MOQESH_SECRET=... \
@@ -121,37 +121,37 @@ MOQESH_LOG=/var/log/nginx/access.log MOQESH_BASE_PATH=/lure MOQESH_DRY_RUN=1 \
   sh /opt/moqesh/moqesh-ship.sh
 ```
 
-Imprime el/los cuerpo(s) JSON exactos y las cabeceras firmadas que se enviarían,
-**sin** contactar el servidor y **sin** avanzar el offset. Verifica que:
+It prints the exact JSON body (or bodies) and the signed headers that would be sent,
+**without** contacting the server and **without** advancing the offset. Check that:
 
-- solo aparecen líneas del cebo (ninguna de tráfico real),
-- el formato (`MOQESH_FORMAT`) casa con tu web server.
+- only lure lines appear (none from real traffic),
+- the format (`MOQESH_FORMAT`) matches your web server.
 
-## Verificación de paridad de firma (hecha)
+## Signature parity check (done)
 
-Se comprobó que la firma HMAC de los scripts coincide **byte a byte** con
-`moqesh.security.sign`:
+The scripts' HMAC signature was verified to match `moqesh.security.sign`
+**byte for byte**:
 
 ```sh
-# POSIX / openssl  (lo que hace sign_file en moqesh-ship.sh)
+# POSIX / openssl  (what sign_file does in moqesh-ship.sh)
 SECRET=...; TS=1760000000.123; BODY='{"format":"nginx",...}'
 { printf '%s.' "$TS"; printf '%s' "$BODY"; } | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}'
 
-# Referencia Python
+# Python reference
 python -c "from moqesh import security; print(security.sign('$SECRET','$TS', b'...'))"
 ```
 
-Resultado: idénticos para cuerpo lleno y para cuerpo vacío (GET `/control`),
-incluso con secretos que empiezan por `-` (p.ej. de `token_urlsafe`). La versión
-PowerShell (`HMACSHA256` sobre `UTF8(ts + "." + body)`) produce el mismo hash.
-Además, el cuerpo JSON generado por ambos scripts se parseó con
-`moqesh.logparse.parse` y la verificación de `X-Moqesh-Server-Signature` se probó
-contra una respuesta firmada con `moqesh.security.sign` (incluida una prueba de
-manipulación que, correctamente, se rechaza).
+Result: identical for a full body and for an empty body (GET `/control`),
+even with secrets that start with `-` (e.g. from `token_urlsafe`). The PowerShell
+version (`HMACSHA256` over `UTF8(ts + "." + body)`) produces the same hash.
+In addition, the JSON body generated by both scripts was parsed with
+`moqesh.logparse.parse`, and verification of `X-Moqesh-Server-Signature` was tested
+against a response signed with `moqesh.security.sign` (including a tampering test that
+is correctly rejected).
 
-## Nota de seguridad
+## Security note
 
-En POSIX el secreto se pasa a `openssl dgst -hmac` como argumento; es visible de
-forma fugaz en la lista de procesos del propio host. Es el mismo secreto que ya
-vive en el entorno del cron; mantén el host y el fichero de entorno con permisos
-restrictivos.
+On POSIX the secret is passed to `openssl dgst -hmac` as an argument; it is briefly
+visible in the host's own process list. It is the same secret that already
+lives in the cron environment; keep the host and the environment file with
+restrictive permissions.

@@ -1,8 +1,8 @@
-"""Servidor honeypot local (puerto 8080) — sensor `local`.
+"""Local honeypot server (port 8080): the `local` sensor.
 
-Sirve el laberinto/escenario en vivo y delega el registro + scoring al pipeline
-central (`pipeline.score_and_record`), el mismo que usan los sensores remotos.
-Los efectos async (webhook de bloqueo, confirmación IA, broadcast) se agendan en el loop.
+Serves the live labyrinth/scenario and delegates logging + scoring to the central
+pipeline (`pipeline.score_and_record`), the same one remote sensors use.
+Async effects (block webhook, AI confirmation, broadcast) are scheduled on the loop.
 """
 
 from __future__ import annotations
@@ -100,19 +100,19 @@ async def _profile_if_mimic(cfg: HoneypotConfig) -> dict | None:
             db.commit()
         return data
     except Exception:
-        logger.warning("[Mimic] No se pudo perfilar %s; se usa Template", cfg.target_url, exc_info=True)
+        logger.warning("[Mimic] Could not profile %s; using Template", cfg.target_url, exc_info=True)
         return None
 
 
 async def _resolve_profile(cfg: HoneypotConfig) -> dict | None:
-    """Perfil activo del laberinto: built-in seleccionable (Template/Static con
-    `MOQESH_SITE_PROFILE`) o, en modo Mimic, el crawl del sitio objetivo."""
+    """Active labyrinth profile: a selectable built-in (Template/Static with
+    `MOQESH_SITE_PROFILE`) or, in Mimic mode, the crawl of the target site."""
     if settings.site_profile and cfg.generation_mode != "Mimic":
         prof = load_builtin(settings.site_profile)
         if prof is not None:
             logger.info("[Perfil] built-in '%s' cargado", settings.site_profile)
             return prof
-        logger.warning("[Perfil] built-in '%s' no encontrado; laberinto genérico por seed", settings.site_profile)
+        logger.warning("[Profile] built-in '%s' not found; generic labyrinth by seed", settings.site_profile)
     return await _profile_if_mimic(cfg)
 
 
@@ -132,14 +132,14 @@ async def lifespan(app: FastAPI):
     app.state.classifier = build_classifier(app.state.ai_options)
     app.state.block_service = BlockService(app.state.notify)
     app.state.honeypot_id = cfg.id
-    # World: contenido estático inerte (fuente primaria). Si está vacío, siembra la semilla curada.
+    # World: inert static content (primary source). If empty, seed the curated seed content.
     if settings.world_enabled:
         wpath = settings.world_path or default_world_path(settings.db_path)
         if settings.world_autoseed:
             ensure_seeded(wpath)
         app.state.world = World(wpath)
         if app.state.world.active:
-            logger.info("[world] activo en %s (%d portal/es)", wpath, len(app.state.world.mounts))
+            logger.info("[world] active at %s (%d portal(s))", wpath, len(app.state.world.mounts))
     else:
         app.state.world = None
     yield
@@ -147,11 +147,11 @@ async def lifespan(app: FastAPI):
 
 
 class _HeaderCaseMiddleware:
-    """Reescribe los nombres de cabecera de respuesta a Title-Case (Content-Type, Server, …).
+    """Rewrite response header names to Title-Case (Content-Type, Server, ...).
 
-    uvicorn/ASGI los emite en minúscula; un `Server: Microsoft-IIS/10.0` o `nginx` con cabeceras
-    en minúscula es técnicamente imposible y delata el stack. Un servidor real (nginx/IIS/Apache)
-    las manda capitalizadas, con casos especiales como `WWW-Authenticate` y `ETag`.
+    uvicorn/ASGI emits them in lowercase; a `Server: Microsoft-IIS/10.0` or `nginx` with lowercase
+    headers is technically impossible and exposes the stack. A real server (nginx/IIS/Apache)
+    sends them capitalized, with special cases like `WWW-Authenticate` and `ETag`.
     """
 
     _SPECIAL = {
@@ -186,24 +186,24 @@ class _HeaderCaseMiddleware:
 
 
 def _file_meta(seed: str, path: str, size: int) -> tuple[str, str]:
-    """Last-Modified + ETag deterministas para un 'fichero' (estilo nginx: mtime-size en hex).
+    """Deterministic Last-Modified + ETag for a 'file' (nginx style: mtime-size in hex).
 
-    El mtime se comparte con el generador de contenido (`file_mtime_epoch`), así la fecha de
-    modificación nunca contradice lo que el fichero documenta (p.ej. las entradas del CHANGELOG).
+    The mtime is shared with the content generator (`file_mtime_epoch`), so the
+    modification date never contradicts what the file documents (e.g. CHANGELOG entries).
     """
     epoch = file_mtime_epoch(seed, path)
     return formatdate(epoch, usegmt=True), f'"{epoch:x}-{size:x}"'
 
 
-# Tipos de nodo "dinámicos" (listados, API, errores): como en un server real, NO llevan
-# Last-Modified/ETag/Accept-Ranges. El resto son 'ficheros' y sí los llevan.
+# "Dynamic" node kinds (listings, API, errors): as on a real server, they do NOT carry
+# Last-Modified/ETag/Accept-Ranges. Everything else is a 'file' and does.
 _DYNAMIC_KINDS = {
     "dir", "landing", "notfound", "blocked", "api", "resource", "scenario:dir", "world-dyn", "world-stream",
 }
 
-# docs_url/redoc_url/openapi_url = None: sin la documentación automática de FastAPI. De lo
-# contrario /openapi.json, /docs y /redoc revelarían el framework y el título de la app
-# (delator inmediato). Con esto, esas rutas caen al catch-all y se sirven como cebo normal.
+# docs_url/redoc_url/openapi_url = None: no automatic FastAPI docs. Otherwise
+# /openapi.json, /docs and /redoc would reveal the framework and the app title
+# (an instant giveaway). With this, those routes fall through to the catch-all and are served as normal lure.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.add_middleware(_HeaderCaseMiddleware)
 
@@ -240,10 +240,10 @@ def _not_found(banner: str) -> bytes:
 
 
 def scenario_progress_signals(db, sensor_id, scenario, hit, path, session_id, ordered) -> dict[str, bool]:
-    """Actualiza SessionProgress con el hit del escenario y devuelve las señales fuertes.
+    """Update SessionProgress with the scenario hit and return the strong signals.
 
-    Reutilizable por el honeypot local y por la ingestión del agente (que reconstruye
-    un `hit` desde los facts reportados).
+    Reusable by the local honeypot and by agent ingestion (which rebuilds
+    a `hit` from the reported facts).
     """
     prog = db.scalar(select(SessionProgress).where(SessionProgress.session_id == session_id).limit(1))
     if prog is None:
@@ -311,9 +311,9 @@ def catch_all(full_path: str, request: Request) -> Response:
         brand = LabyrinthGenerator.brand_for(opts)
         blocked = st.notify.enforce_block and st.block_service.is_blocked(db, source_ip)
 
-        # Intensidad adaptativa: deriva del estado de la sesión TRAS la petición anterior (score +
-        # señales ya persistidos). La respuesta N escala según lo que sabíamos en N-1 — no hace
-        # falta puntuar antes de servir. 0 = desconocido/humano (sitio real finito, máximo sigilo).
+        # Adaptive intensity: derived from the session state AFTER the previous request (score +
+        # signals already persisted). Response N scales by what we knew at N-1; no need
+        # to score before serving. 0 = unknown/human (real finite site, max stealth).
         sess = db.scalar(
             select(AgentSession)
             .where(
@@ -325,7 +325,7 @@ def catch_all(full_path: str, request: Request) -> Response:
             .limit(1)
         )
         intensity = intensity_for(sess)
-        # ?page=N -> /page/N canónico, para que la paginación por query sea coherente con /page/N.
+        # ?page=N -> canonical /page/N, so query pagination is consistent with /page/N.
         eff_path = effective_api_path(path, request.url.query)
 
         attachment: str | None = None
@@ -338,8 +338,8 @@ def catch_all(full_path: str, request: Request) -> Response:
         if blocked:
             body, content_type, status, node_kind = _forbidden(banner), "text/html", 403, "blocked"
         else:
-            # El escenario CTF solo se sirve si está habilitado (flag por despliegue). Si no, el
-            # honeypot presenta únicamente el laberinto realista (máximo sigilo).
+            # The CTF scenario is only served if enabled (per-deployment flag). Otherwise the
+            # honeypot presents only the realistic labyrinth (max stealth).
             scenario = load_active(db) if settings.scenarios_enabled else None
             if scenario is not None:
                 ctx = ScenarioContext(seed=opts.seed, brand=LabyrinthGenerator.brand_for(opts))
@@ -355,18 +355,18 @@ def catch_all(full_path: str, request: Request) -> Response:
                 body, content_type, status = hit.body, hit.content_type, hit.status
                 attachment, node_kind = hit.attachment_name, "scenario:" + hit.node_kind
             elif world is not None and world.active:
-                # World activo = fuente primaria: sirve SOLO bytes de ficheros reales (nunca
-                # ejecuta). Lo no presente -> 404 real (no cae al laberinto: mezclar contenido
-                # real con generado reintroduciría los delatores).
+                # Active World = primary source: serves ONLY bytes of real files (never
+                # executes). Anything absent -> real 404 (does not fall back to the labyrinth: mixing real
+                # and generated content would reintroduce the giveaways).
                 wf = world.resolve(path)
                 if wf is not None and wf.stream:
-                    # Fichero grande: STREAMING desde disco (FileResponse), nunca en memoria.
+                    # Large file: STREAMING from disk (FileResponse), never in memory.
                     node_kind = "world-stream"
                     stream_path, stream_size = wf.path, wf.size
                     body, content_type, status = b"", wf.content_type, 200
                 elif wf is not None:
-                    # Un fichero dinámico (Moqesh rellenó tokens) se sirve como respuesta de app
-                    # (sin ETag/Last-Modified, no-store); uno estático pequeño, como fichero.
+                    # A dynamic file (Moqesh filled in tokens) is served as an app response
+                    # (no ETag/Last-Modified, no-store); a small static one, as a file.
                     node_kind = "world-dyn" if wf.dynamic else "world"
                     body, content_type, status = wf.body, wf.content_type, 200
                 else:
@@ -376,13 +376,13 @@ def catch_all(full_path: str, request: Request) -> Response:
                 body, content_type, status = page.body, page.content_type, page.status_code
                 attachment, node_kind = page.attachment_name, page.node_kind
             else:
-                # Ruta no enlazada (sondeo de fingerprinter) o token-exhaust off -> 404 real.
+                # Unlinked path (fingerprinter probe) or token-exhaust off -> real 404.
                 body, content_type, status, node_kind = _not_found(banner), "text/html", 404, "notfound"
 
         tarpit = max(0, cfg.tarpit_delay_ms)
         if settings.adaptive_tarpit and intensity > 0:
-            # El retardo crece con la intensidad hasta tarpit_max_ms (invisible a intensidad 0):
-            # quema wall-clock y tokens del agente confirmado sin afectar a tráfico humano.
+            # The delay grows with intensity up to tarpit_max_ms (invisible at intensity 0):
+            # burns the confirmed agent's wall-clock and tokens without affecting human traffic.
             tarpit = min(settings.tarpit_max_ms, tarpit + intensity * (settings.tarpit_max_ms // 3))
         if tarpit:
             time.sleep(tarpit / 1000.0)
@@ -416,9 +416,9 @@ def catch_all(full_path: str, request: Request) -> Response:
     cred_reuse, score, sid = result.cred_reuse, result.score, result.session_id
     if cred_reuse or (st.notify.auto_block_score > 0 and score >= st.notify.auto_block_score):
         reason = (
-            "uso de credencial plantada (confirmado)"
+            "use of a planted credential (confirmed)"
             if cred_reuse
-            else f"score {score:.2f} ≥ umbral {st.notify.auto_block_score:.2f}"
+            else f"score {score:.2f} >= threshold {st.notify.auto_block_score:.2f}"
         )
         manager.schedule(
             _auto_block(st.block_service, source_ip, reason, sid, {"score": score, "credentialReuse": cred_reuse})
@@ -430,14 +430,14 @@ def catch_all(full_path: str, request: Request) -> Response:
         manager.publish("alert", result.alert)
 
     resp_headers = {"Server": banner, "Date": formatdate(usegmt=True)}
-    # Ficheros (no listados/API/errores): como un server real, llevan metadatos de estático.
+    # Files (not listings/API/errors): like a real server, they carry static-file metadata.
     if status == 200 and node_kind not in _DYNAMIC_KINDS and not node_kind.endswith(":dir"):
         last_mod, etag = _file_meta(opts.seed, path, len(body))
         resp_headers["Last-Modified"] = last_mod
         resp_headers["ETag"] = etag
         resp_headers["Accept-Ranges"] = "bytes"
-    # Cabeceras de app/seguridad en las respuestas del World: una app interna real tras nginx
-    # las lleva (su ausencia total era un delator). Dinámico = no-store; estático = cacheable.
+    # App/security headers on World responses: a real internal app behind nginx
+    # carries them (their total absence was a giveaway). Dynamic = no-store; static = cacheable.
     if node_kind in ("world", "world-dyn", "world-stream"):
         resp_headers["X-Request-Id"] = secrets.token_hex(16)
         resp_headers["X-Content-Type-Options"] = "nosniff"
@@ -456,8 +456,8 @@ def catch_all(full_path: str, request: Request) -> Response:
     if status == 401:
         resp_headers["WWW-Authenticate"] = f'Bearer realm="{brand}", Basic realm="{brand}"'
     if stream_path is not None:
-        # Fichero grande servido en streaming: FileResponse fija Content-Length/ETag/Last-Modified
-        # reales desde el stat del fichero y soporta Range (como un servidor estático real).
+        # Large file served by streaming: FileResponse sets real Content-Length/ETag/Last-Modified
+        # from the file's stat and supports Range (like a real static server).
         return FileResponse(
             stream_path, media_type=content_type.split(";")[0].strip(), status_code=status, headers=resp_headers
         )

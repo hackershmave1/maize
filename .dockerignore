@@ -17,4 +17,4 @@ bundles/
 data/
 *.md
 !README.md
-# NOTA: no excluir moqesh/agent/dist — ahí van los binarios del agente del CI.
+# NOTE: do not exclude moqesh/agent/dist; CI puts the agent binaries there.

@@ -13,7 +13,7 @@ export function RequestsChart({ data }: Props) {
 
   return (
     <div className="bg-surface rounded-lg border border-border p-5">
-      <h3 className="text-sm font-medium text-fg-muted mb-4">Requests — últimas 24h</h3>
+      <h3 className="text-sm font-medium text-fg-muted mb-4">Requests - last 24h</h3>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={formatted}>

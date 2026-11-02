@@ -1,4 +1,4 @@
-"""scripts/genbig.py: generador de árboles de texto voluminoso (relleno real) para el World."""
+"""scripts/genbig.py: generator of voluminous text trees (real filler) for the World."""
 
 import subprocess
 import sys
@@ -10,10 +10,10 @@ GENBIG = Path(__file__).resolve().parents[1] / "scripts" / "genbig.py"
 def test_genbig_generates_tree_with_custom_subdirs(tmp_path):
     corpus = tmp_path / "corpus.txt"
     corpus.write_text(
-        "Este es un parrafo suficientemente largo para superar el umbral de ochenta "
-        "caracteres y servir de material de relleno realista para las pruebas unitarias.\n\n"
-        "Un segundo parrafo, tambien largo, para que el generador tenga variedad de donde "
-        "escoger bloques al mezclar el contenido de los ficheros resultantes del proceso.\n\n",
+        "This is a paragraph long enough to clear the eighty character threshold "
+        "and serve as realistic filler material for the unit tests in this module.\n\n"
+        "A second paragraph, also long, so that the generator has variety to pick "
+        "blocks from when it mixes the content of the resulting files of the process.\n\n",
         encoding="utf-8",
     )
     out = tmp_path / "data"
@@ -27,9 +27,9 @@ def test_genbig_generates_tree_with_custom_subdirs(tmp_path):
         capture_output=True, text=True, timeout=120,
     )
     assert r.returncode == 0, r.stderr
-    assert (out / "23").is_dir() and (out / "24").is_dir()  # naming de subdirs personalizado
+    assert (out / "23").is_dir() and (out / "24").is_dir()  # custom subdir naming
     files = sorted(out.rglob("*.txt"))
     assert len(files) == 4
     for f in files:
-        assert f.stat().st_size == 64 * 1024  # tamaño exacto por fichero
-    assert "parrafo" in files[0].read_text(encoding="utf-8", errors="ignore")  # texto real del corpus
+        assert f.stat().st_size == 64 * 1024  # exact size per file
+    assert "paragraph" in files[0].read_text(encoding="utf-8", errors="ignore")  # real corpus text

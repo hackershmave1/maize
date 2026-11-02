@@ -49,7 +49,7 @@ function SessionRow({ session }: { session: SessionDto }) {
             return (
               <span
                 className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border ${intensityBadge(lvl)}`}
-                title={`Intensidad adaptativa ${lvl}/3`}
+                title={`Adaptive intensity ${lvl}/3`}
               >
                 {lvl} · {INTENSITY_LABELS[lvl]}
               </span>
@@ -65,7 +65,7 @@ function SessionRow({ session }: { session: SessionDto }) {
         <td className="px-4 py-2.5 font-mono text-xs">{session.maxDepthReached}</td>
         <td className="px-4 py-2.5 font-mono text-xs text-fg-muted">{session.tokensEstimated.toLocaleString()}</td>
         <td className="px-4 py-2.5 text-xs text-fg-muted max-w-[180px] truncate" title={session.userAgent ?? ''}>
-          {session.userAgent || '—'}
+          {session.userAgent || '-'}
         </td>
       </tr>
       {open && (
@@ -74,11 +74,11 @@ function SessionRow({ session }: { session: SessionDto }) {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-1 space-y-3">
                 <div>
-                  <div className="text-xs text-fg-muted mb-1">Reglas disparadas</div>
+                  <div className="text-xs text-fg-muted mb-1">Rules fired</div>
                   <div className="flex flex-wrap gap-1">
                     {rules.length > 0 ? rules.map(r => (
                       <span key={r} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border">{r}</span>
-                    )) : <span className="text-xs text-fg-muted">ninguna</span>}
+                    )) : <span className="text-xs text-fg-muted">none</span>}
                   </div>
                 </div>
                 {session.verdictReasoning && (
@@ -89,33 +89,33 @@ function SessionRow({ session }: { session: SessionDto }) {
                 )}
                 {session.modelAttribution && (
                   <div>
-                    <div className="text-xs text-fg-muted mb-1">Modelo</div>
+                    <div className="text-xs text-fg-muted mb-1">Model</div>
                     <p className="text-xs font-mono text-accent break-all">{session.modelAttribution}</p>
                   </div>
                 )}
                 {detail?.progress && (
                   <div>
-                    <div className="text-xs text-fg-muted mb-1">Progreso CTF</div>
+                    <div className="text-xs text-fg-muted mb-1">CTF progress</div>
                     <div className="text-xs space-y-0.5">
-                      <div>etapa alcanzada: <span className="font-mono text-fg">{detail.progress.stageReached}</span></div>
-                      {detail.progress.credentialsObtained && <div>creds obtenidas: <span className="font-mono text-amber">{detail.progress.credentialsObtained}</span></div>}
-                      {detail.progress.credentialsUsed && <div className="text-red">creds USADAS: <span className="font-mono">{detail.progress.credentialsUsed}</span></div>}
-                      <div className="text-fg-muted">rutas ocultas: {detail.progress.hiddenHits} · decompile: {detail.progress.decompileFollow ? 'sí' : 'no'} · fallos auth: {detail.progress.failedAuthAttempts}</div>
+                      <div>stage reached: <span className="font-mono text-fg">{detail.progress.stageReached}</span></div>
+                      {detail.progress.credentialsObtained && <div>creds obtained: <span className="font-mono text-amber">{detail.progress.credentialsObtained}</span></div>}
+                      {detail.progress.credentialsUsed && <div className="text-red">creds USED: <span className="font-mono">{detail.progress.credentialsUsed}</span></div>}
+                      <div className="text-fg-muted">hidden paths: {detail.progress.hiddenHits} · decompile: {detail.progress.decompileFollow ? 'yes' : 'no'} · auth failures: {detail.progress.failedAuthAttempts}</div>
                     </div>
                   </div>
                 )}
                 <div className="flex gap-4 text-xs text-fg-muted">
-                  <span>nodos: <span className="font-mono text-fg">{session.nodesServed}</span></span>
-                  <span>tiempo: <span className="font-mono text-fg">{session.timeWastedMs} ms</span></span>
+                  <span>nodes: <span className="font-mono text-fg">{session.nodesServed}</span></span>
+                  <span>time: <span className="font-mono text-fg">{session.timeWastedMs} ms</span></span>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); api.blocks.block(session.sourceIp, `bloqueo manual desde sesión (score ${session.aiProbabilityScore.toFixed(2)})`).then(() => alert(`IP ${session.sourceIp} bloqueada`)); }}
+                  onClick={e => { e.stopPropagation(); api.blocks.block(session.sourceIp, `manual block from session (score ${session.aiProbabilityScore.toFixed(2)})`).then(() => alert(`IP ${session.sourceIp} blocked`)); }}
                   className="mt-1 flex items-center gap-1.5 px-2.5 py-1 bg-red/10 text-red rounded text-xs font-medium hover:bg-red/20 w-fit">
-                  Bloquear {session.sourceIp}
+                  Block {session.sourceIp}
                 </button>
               </div>
               <div className="lg:col-span-2">
-                <div className="text-xs text-fg-muted mb-1">Timeline de requests</div>
+                <div className="text-xs text-fg-muted mb-1">Request timeline</div>
                 <div className="max-h-64 overflow-y-auto font-mono text-[11px] space-y-0.5 pr-2">
                   {detail?.requests.map((r, i) => {
                     const prev = i > 0 ? new Date(detail.requests[i - 1].timestamp).getTime() : 0;
@@ -129,7 +129,7 @@ function SessionRow({ session }: { session: SessionDto }) {
                       </div>
                     );
                   })}
-                  {!detail && <span className="text-fg-muted">cargando…</span>}
+                  {!detail && <span className="text-fg-muted">loading...</span>}
                 </div>
               </div>
             </div>
@@ -155,7 +155,7 @@ export function Sessions() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
-        <p className="text-sm text-fg-muted mt-1">Sesiones agrupadas por IP — clic para ver el timeline y el veredicto</p>
+        <p className="text-sm text-fg-muted mt-1">Sessions grouped by IP: click to see the timeline and the verdict</p>
       </div>
 
       <div className="bg-surface rounded-lg border border-border overflow-hidden">
@@ -166,8 +166,8 @@ export function Sessions() {
                 <th className="w-8 px-4 py-3"></th>
                 <th className="text-left px-4 py-3">Source IP</th>
                 <th className="text-left px-4 py-3">AI Score</th>
-                <th className="text-left px-4 py-3">Intensidad</th>
-                <th className="text-left px-4 py-3">Veredicto</th>
+                <th className="text-left px-4 py-3">Intensity</th>
+                <th className="text-left px-4 py-3">Verdict</th>
                 <th className="text-left px-4 py-3">Requests</th>
                 <th className="text-left px-4 py-3">Prof.</th>
                 <th className="text-left px-4 py-3">Tokens Est.</th>
@@ -177,7 +177,7 @@ export function Sessions() {
             <tbody>
               {sessions.map(session => <SessionRow key={session.id} session={session} />)}
               {sessions.length === 0 && !loading && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-fg-muted text-sm">Sin sesiones detectadas</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-fg-muted text-sm">No sessions detected</td></tr>
               )}
             </tbody>
           </table>

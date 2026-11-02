@@ -1,4 +1,4 @@
-"""Punto de entrada: `python -m moqesh.agent`."""
+"""Entry point: `python -m moqesh.agent`."""
 
 from __future__ import annotations
 

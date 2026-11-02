@@ -11,24 +11,24 @@ export function Blocks() {
   const load = () => api.blocks.list().then(setBlocks).catch(() => {});
   useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
 
-  const doBlock = async () => { if (!ip.trim()) return; await api.blocks.block(ip.trim(), reason || 'bloqueo manual'); setIp(''); setReason(''); load(); };
+  const doBlock = async () => { if (!ip.trim()) return; await api.blocks.block(ip.trim(), reason || 'manual block'); setIp(''); setReason(''); load(); };
 
   const active = blocks.filter(b => b.active);
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Bloqueos</h1>
-        <p className="text-sm text-fg-muted mt-1">IPs bloqueadas por el honeypot. Un atacante confirmado se bloquea y notifica automáticamente; el honeypot le responde 403.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Blocks</h1>
+        <p className="text-sm text-fg-muted mt-1">IPs blocked by the honeypot. A confirmed attacker is blocked and notified automatically; the honeypot answers them with 403.</p>
       </div>
 
       <div className="bg-surface border border-border rounded-lg p-4 mb-5">
-        <div className="text-xs font-medium mb-2 flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Bloqueo manual</div>
+        <div className="text-xs font-medium mb-2 flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Manual block</div>
         <div className="flex gap-2 flex-wrap">
-          <input value={ip} onChange={e => setIp(e.target.value)} placeholder="IP (ej. 203.0.113.5)"
+          <input value={ip} onChange={e => setIp(e.target.value)} placeholder="IP (e.g. 203.0.113.5)"
             className="bg-surface-alt border border-border rounded px-3 py-1.5 text-sm font-mono w-48 focus:outline-none focus:border-accent" />
-          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="motivo (opcional)"
+          <input value={reason} onChange={e => setReason(e.target.value)} placeholder="reason (optional)"
             className="bg-surface-alt border border-border rounded px-3 py-1.5 text-sm flex-1 min-w-40 focus:outline-none focus:border-accent" />
-          <button onClick={doBlock} className="flex items-center gap-1.5 px-3 py-1.5 bg-red/15 text-red rounded text-sm font-medium hover:bg-red/25"><Ban className="w-3.5 h-3.5" /> Bloquear</button>
+          <button onClick={doBlock} className="flex items-center gap-1.5 px-3 py-1.5 bg-red/15 text-red rounded text-sm font-medium hover:bg-red/25"><Ban className="w-3.5 h-3.5" /> Block</button>
         </div>
       </div>
 
@@ -39,10 +39,10 @@ export function Blocks() {
             <thead>
               <tr className="border-b border-border text-xs text-fg-muted uppercase tracking-wider">
                 <th className="text-left px-4 py-2 font-medium">IP</th>
-                <th className="text-left px-4 py-2 font-medium">Origen</th>
-                <th className="text-left px-4 py-2 font-medium">Motivo</th>
-                <th className="text-left px-4 py-2 font-medium">Fecha</th>
-                <th className="text-right px-4 py-2 font-medium">Acción</th>
+                <th className="text-left px-4 py-2 font-medium">Source</th>
+                <th className="text-left px-4 py-2 font-medium">Reason</th>
+                <th className="text-left px-4 py-2 font-medium">Date</th>
+                <th className="text-right px-4 py-2 font-medium">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -57,7 +57,7 @@ export function Blocks() {
                   </td>
                 </tr>
               ))}
-              {blocks.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-fg-muted text-sm">Sin bloqueos</td></tr>}
+              {blocks.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-fg-muted text-sm">No blocks</td></tr>}
             </tbody>
           </table>
         </div>
