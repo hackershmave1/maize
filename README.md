@@ -1,75 +1,74 @@
 # Moqesh AI
 
-<!-- Ajusta `juliourena/moqesh` al slug real del repo en GitHub (badge + GHCR, más abajo). -->
+<!-- Replace `juliourena/moqesh` with the repo's real GitHub slug (badge + GHCR, below). -->
 ![CI](https://github.com/juliourena/moqesh/actions/workflows/ci.yml/badge.svg)
 
-Honeypot open-source contra **agentes de IA autónomos** que escanean tu
-infraestructura. Moqesh sirve un **laberinto Token Exhaust** —un maze infinito y
-coherente de contenido creíble— que atrapa a los agentes automatizados, **agota
-los tokens de su LLM**, perfila su comportamiento y permite detectarlos y
-bloquearlos. Proyecto nativo en **Python** (FastAPI + SQLAlchemy).
+An open-source honeypot against **autonomous AI agents** that scan your
+infrastructure. Moqesh serves a **Token Exhaust labyrinth** — an infinite,
+coherent maze of believable content — that traps automated agents, **drains
+their LLM's tokens**, profiles their behavior, and lets you detect and
+block them. A native **Python** project (FastAPI + SQLAlchemy).
 
-**Documentación:** [configuración](docs/CONFIGURATION.md) · [worldsmith (constructor IA)](docs/WORLDSMITH.md)
-· [sensores remotos](docs/SENSORS.md) · [contribuir](CONTRIBUTING.md) · [seguridad](SECURITY.md)
+**Documentation:** [configuration](docs/CONFIGURATION.md) · [worldsmith (AI builder)](docs/WORLDSMITH.md)
+· [remote sensors](docs/SENSORS.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md)
 
-## Cómo funciona
+## How it works
 
-1. **Cebo (Lure)** — sirve un portal interno falso: listados de directorios,
-   `.env`, configs, READMEs, APIs y binarios señuelo.
-2. **Trampa (Trap)** — cada página enlaza más hondo: los listados nunca terminan,
-   las APIs paginan sin fin, los READMEs apuntan a archivos "jugosos" y los
-   bundles JS esconden endpoints. Un agente que *sigue todo* navega indefinidamente.
-3. **Detección (Detect)** — cada request se puntúa con un motor de **reglas
-   conductuales** (regularidad temporal, descenso en profundidad, fan-out
-   exhaustivo, seguimiento de breadcrumbs/README, deobfuscación de JS, UAs de
-   crawlers de IA…). Al cruzar el umbral se levanta una alerta.
-4. **Confirmación (opcional)** — un módulo LLM revisa sesiones en zona gris y
-   confirma si el visitante es un agente. El sistema funciona **sin** este módulo.
-5. **Bloqueo (Block)** — el reuso de una credencial plantada (honeytoken) o un
-   score sobre umbral bloquea la IP de forma activa (403) y puede notificar por webhook.
+1. **Lure** — serves a fake internal portal: directory listings, `.env` files,
+   configs, READMEs, APIs, and decoy binaries.
+2. **Trap** — every page links deeper: listings never end, APIs paginate
+   forever, READMEs point to "juicy" files, and JS bundles hide endpoints. An
+   agent that *follows everything* navigates indefinitely.
+3. **Detect** — every request is scored by a **behavioral rules** engine
+   (timing regularity, depth descent, exhaustive fan-out, breadcrumb/README
+   following, JS deobfuscation, AI-crawler UAs…). Crossing the threshold raises an alert.
+4. **Confirm (optional)** — an LLM module reviews gray-zone sessions and
+   confirms whether the visitor is an agent. The system works **without** this module.
+5. **Block** — reuse of a planted credential (honeytoken) or a score above the
+   threshold actively blocks the IP (403) and can notify via webhook.
 
-Todo el contenido es **determinista por `(seed, path)`**: la misma URL devuelve
-siempre la misma página dentro de un deployment (no hay ruido aleatorio delator),
-pero dos deployments con seeds distintos no comparten firma estática (anti-fingerprint).
+All content is **deterministic per `(seed, path)`**: the same URL always returns
+the same page within a deployment (no telltale random noise), while two
+deployments with different seeds share no static signature (anti-fingerprint).
 
-## Modos de generación
+## Generation modes
 
-- **Template** — vocabulario genérico mutado por seed (zero-config, sirve contra cualquier objetivo).
-- **Mimic** — perfila un sitio real (`TargetUrl`, crawl read-only) y genera contenido que se mimetiza con él.
-- **Static** — desactiva el laberinto procedural.
+- **Template** — generic vocabulary mutated by seed (zero-config, works against any target).
+- **Mimic** — profiles a real site (`TargetUrl`, read-only crawl) and generates content that blends in with it.
+- **Static** — disables the procedural labyrinth.
 
-## Escenarios CTF
+## CTF scenarios
 
-Sobre el laberinto se puede activar un **escenario** autorable: una cadena de
-ataque con rutas ocultas, gates de credenciales reales, binarios decompilables y
-vaults. Incluye dos packs: `corp-breach` (DLL → vault → reuso de credencial →
-flag) y `git-leak` (fuga de `.git` → token → secretos de CI). Editables e
-importables/exportables como JSON desde el dashboard.
+On top of the labyrinth you can enable an authorable **scenario**: an attack
+chain with hidden routes, real credential gates, decompilable binaries, and
+vaults. Two packs are included: `corp-breach` (DLL → vault → credential reuse →
+flag) and `git-leak` (`.git` leak → token → CI secrets). Editable and
+importable/exportable as JSON from the dashboard.
 
-## World y Worldsmith (contenido inerte + IA)
+## World and Worldsmith (inert content + AI)
 
-La fuente primaria de contenido es el **World**: un árbol de ficheros reales e **inertes**
-(varios portales bajo distintos prefijos, con mock data) que el honeypot sirve **solo como
-bytes — nunca ejecuta nada**. Sustituye al laberinto generado (que queda como *legacy*,
-OFF cuando hay World) y elimina los artefactos estructurales que delataban al honeypot.
+The primary content source is the **World**: a tree of real, **inert** files
+(several portals under different prefixes, with mock data) that the honeypot serves **only as
+bytes — it never executes anything**. It replaces the generated labyrinth (which becomes *legacy*,
+OFF when a World is present) and removes the structural artifacts that gave the honeypot away.
 
-Para **quema de tokens a gran escala sin el delator del contenido generado**, un directorio del
-World puede marcarse `"autoindex": true` (sirve un listado de "directorio abierto") y rellenarse
-con árboles voluminosos de **texto real** mediante [`scripts/genbig.py`](scripts/genbig.py);
-los ficheros grandes se sirven en streaming. Detalle en [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+For **large-scale token burning without the giveaway of generated content**, a World
+directory can be marked `"autoindex": true` (it serves an "open directory" listing) and filled
+with voluminous trees of **real text** using [`scripts/genbig.py`](scripts/genbig.py);
+large files are streamed. Details in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
-El **worldsmith** es un agente de IA que **construye y evoluciona** ese World + un **cebo**
-colocado en la ruta de caza del atacante (un `.env` filtrado con un único honeytoken → una
-consola ops protegida; reusar el token dispara `credential_reuse` y bloquea). La inertness se
-**impone mecánicamente** (validación por escritura + re-validación del árbol antes de publicar),
-no se confía al prompt. Proveedores: `stub` (sin IA), `api` (Anthropic tool-use) y `claude_cli`
-(suscripción). Uso:
+The **worldsmith** is an AI agent that **builds and evolves** that World plus a **lure**
+placed on the attacker's hunting path (a leaked `.env` with a single honeytoken → a
+protected ops console; reusing the token fires `credential_reuse` and blocks). Inertness is
+**enforced mechanically** (per-write validation + re-validation of the tree before publishing),
+not entrusted to the prompt. Providers: `stub` (no AI), `api` (Anthropic tool use), and `claude_cli`
+(subscription). Usage:
 
 ```bash
 python -m moqesh.worldsmith build --provider claude_cli --brand "Harborline" --profile saas
 ```
 
-Guía completa: [`docs/WORLDSMITH.md`](docs/WORLDSMITH.md).
+Full guide: [`docs/WORLDSMITH.md`](docs/WORLDSMITH.md).
 
 ## Quick start
 
@@ -81,100 +80,100 @@ docker compose up --build
 
 Dashboard: http://localhost:5000 · Honeypot: http://localhost:8080
 
-### Desarrollo
+### Development
 
 ```bash
-# Backend (honeypot + dashboard/API en un proceso)
+# Backend (honeypot + dashboard/API in one process)
 uv venv .venv && uv pip install --python .venv -e .
-.venv/bin/moqesh            # o: .venv/bin/python -m moqesh.main
+.venv/bin/moqesh            # or: .venv/bin/python -m moqesh.main
 
-# Frontend (hot reload, proxy a :5000)
+# Frontend (hot reload, proxies to :5000)
 cd web && npm install && npm run dev
 ```
 
-Configuración por entorno (prefijo `MOQESH_`): ver [`.env.example`](.env.example).
+Configuration via environment (`MOQESH_` prefix): see [`.env.example`](.env.example).
 
-## Sensores (despliegue remoto)
+## Sensors (remote deployment)
 
-Moqesh puede proteger servidores donde **no** vive, mediante *sensores*:
+Moqesh can protect servers it does **not** live on, via *sensors*:
 
-- **Agente** — binario autocontenido que corre el motor completo en el servidor
-  remoto (laberinto infinito, gates de credenciales/CTF) y envía telemetría firmada.
-- **Agentless** — ZIP estáticos (aleatorios, sin patrón) que descomprimes donde
-  quieras + una tarea programada que envía los logs; sin instalar software.
+- **Agent** — a self-contained binary that runs the full engine on the remote
+  server (infinite labyrinth, credential/CTF gates) and sends signed telemetry.
+- **Agentless** — static ZIPs (randomized, patternless) that you unzip wherever
+  you like + a scheduled task that ships the logs; no software to install.
 
-Alta en un comando desde el dashboard (con verificación de conexión en vivo),
-control y rotación de clave en caliente, auth HMAC firmada en ambos sentidos.
-Guía completa: [`docs/SENSORS.md`](docs/SENSORS.md).
+One-command enrollment from the dashboard (with live connection verification),
+hot control and key rotation, HMAC-signed auth in both directions.
+Full guide: [`docs/SENSORS.md`](docs/SENSORS.md).
 
-## Arquitectura
+## Architecture
 
 ```
 moqesh/
-  rng.py          RNG determinista por (seed,path) — primitivo anti-fingerprint
-  vocabulary.py   pools de vocabulario por tema
-  labyrinth.py    generador Token Exhaust (legacy: OFF cuando hay World activo)
-  world.py        World inerte: sirve SOLO bytes de ficheros reales multi-portal (fuente primaria)
-  worlds/         semilla curada de portales inertes + manifest
-  worldsmith/     agente IA que construye/evoluciona el World + el cebo (inertness validada)
-  detection.py    motor de scoring conductual (10 reglas + señales de escenario)
-  scenarios.py    motor CTF + packs incorporados (import/export)
-  forge.py        binarios señuelo (plantilla DLL parcheada; fallback PE)
-  mimic.py        perfilador de sitios reales (modo Mimic)
-  ai_analyst.py   confirmación opcional (heurística o LLM OpenAI-compatible)
-  blocks.py       bloqueo activo de IPs + webhooks
-  models.py       modelos SQLAlchemy (SQLite)
-  schemas.py      contrato Pydantic (camelCase) para el frontend
-  realtime.py     WebSocket nativo (tiempo real al dashboard)
-  pipeline.py     scoring central (comparten honeypot local e ingestión remota)
-  security.py     HMAC bidireccional, anti-replay, rate-limit, dedup
-  provisioning.py scripts/instrucciones de instalación (onboarding de 1 comando)
-  logparse.py     parser de logs agentless (nginx/apache/caddy/json)
-  bundles.py      generador de ZIP estáticos aleatorios (modo agentless)
-  honeypot.py     servidor trampa local (:8080) — sensor `local`
-  agent/          agente remoto autocontenido (binario PyInstaller)
-  clients/        script de envío agentless (sh + PowerShell)
-  api/            dashboard + API REST + ingestión/control de sensores (:5000)
-web/              dashboard React + TypeScript (Vite, Tailwind)
+  rng.py          deterministic RNG per (seed,path) — anti-fingerprint primitive
+  vocabulary.py   vocabulary pools by theme
+  labyrinth.py    Token Exhaust generator (legacy: OFF when a World is active)
+  world.py        inert World: serves ONLY bytes of real multi-portal files (primary source)
+  worlds/         curated seed of inert portals + manifest
+  worldsmith/     AI agent that builds/evolves the World + the lure (validated inertness)
+  detection.py    behavioral scoring engine (10 rules + scenario signals)
+  scenarios.py    CTF engine + built-in packs (import/export)
+  forge.py        decoy binaries (patched DLL template; PE fallback)
+  mimic.py        real-site profiler (Mimic mode)
+  ai_analyst.py   optional confirmation (heuristic or OpenAI-compatible LLM)
+  blocks.py       active IP blocking + webhooks
+  models.py       SQLAlchemy models (SQLite)
+  schemas.py      Pydantic contract (camelCase) for the frontend
+  realtime.py     native WebSocket (real time to the dashboard)
+  pipeline.py     central scoring (shared by the local honeypot and remote ingestion)
+  security.py     bidirectional HMAC, anti-replay, rate limiting, dedup
+  provisioning.py install scripts/instructions (1-command onboarding)
+  logparse.py     agentless log parser (nginx/apache/caddy/json)
+  bundles.py      random static ZIP generator (agentless mode)
+  honeypot.py     local trap server (:8080) — the `local` sensor
+  agent/          self-contained remote agent (PyInstaller binary)
+  clients/        agentless shipping script (sh + PowerShell)
+  api/            dashboard + REST API + sensor ingestion/control (:5000)
+web/              React + TypeScript dashboard (Vite, Tailwind)
 ```
 
-**Decisiones**: SQLAlchemy síncrono (threadpool de FastAPI) para SQLite; `httpx`
-async solo para HTTP saliente (mimic, LLM, webhooks); tiempo real con WebSocket
-nativo. El forge usa una plantilla DLL generada offline (ver
-[`tools/build_template_dll.md`](tools/build_template_dll.md)); sin ella degrada a
-un binario con credenciales embebidas.
+**Decisions**: synchronous SQLAlchemy (FastAPI threadpool) for SQLite; async `httpx`
+only for outbound HTTP (mimic, LLM, webhooks); real time via native
+WebSocket. The forge uses a DLL template generated offline (see
+[`tools/build_template_dll.md`](tools/build_template_dll.md)); without it, it degrades to
+a binary with embedded credentials.
 
-## Tests y CI
+## Tests and CI
 
 ```bash
-.venv/bin/python -m pytest -q         # determinismo, escenarios, sensores e integración
+.venv/bin/python -m pytest -q         # determinism, scenarios, sensors, and integration
 .venv/bin/ruff check moqesh tests     # lint
 ```
 
-El CI (`.github/workflows/ci.yml`) corre lint + tests + build del SPA en cada push/PR.
+CI (`.github/workflows/ci.yml`) runs lint + tests + the SPA build on every push/PR.
 
-## Builds y releases
+## Builds and releases
 
-Al publicar un tag `vX.Y.Z`, `.github/workflows/release.yml`:
+When a `vX.Y.Z` tag is published, `.github/workflows/release.yml`:
 
-- Compila los **binarios del agente** (PyInstaller) para `linux/amd64`, `linux/arm64` y
-  `windows/amd64` y los adjunta al **GitHub Release**. El servidor los sirve en
-  `GET /download/agent/{os-arch}`. Receta de build: [`moqesh/agent/BUILD.md`](moqesh/agent/BUILD.md).
-- Publica la **imagen Docker multi-arch** (amd64/arm64) en **GHCR**
-  (`ghcr.io/juliourena/moqesh:<tag>` y `:latest`), con los binarios linux del agente embebidos.
+- Builds the **agent binaries** (PyInstaller) for `linux/amd64`, `linux/arm64`, and
+  `windows/amd64` and attaches them to the **GitHub Release**. The server serves them at
+  `GET /download/agent/{os-arch}`. Build recipe: [`moqesh/agent/BUILD.md`](moqesh/agent/BUILD.md).
+- Publishes the **multi-arch Docker image** (amd64/arm64) to **GHCR**
+  (`ghcr.io/juliourena/moqesh:<tag>` and `:latest`), with the linux agent binaries embedded.
 
 ```bash
-# Ejecutar la imagen publicada:
+# Run the published image:
 docker run -p 5000:5000 -p 8080:8080 -v moqesh-data:/app/data ghcr.io/juliourena/moqesh:latest
 ```
 
-Contribuir: ver [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Contributing: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-## Licencia
+## License
 
-**AGPL-3.0-or-later** — ver [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE). © 2026 Julio Ureña.
+**AGPL-3.0-or-later** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). © 2026 Julio Ureña.
 
-Copyleft fuerte con cláusula de red: puedes usar, modificar y ofrecer Moqesh (incluso
-comercialmente), pero si distribuyes una versión modificada **o la ofreces como servicio en
-red**, debes publicar su código fuente bajo AGPL-3.0 y conservar la atribución. Para uso
-propietario/cerrado sin esas obligaciones, contacta para una licencia comercial (doble licencia).
+Strong copyleft with a network clause: you may use, modify, and offer Moqesh (even
+commercially), but if you distribute a modified version **or offer it as a network
+service**, you must publish its source code under AGPL-3.0 and retain attribution. For
+proprietary/closed-source use without those obligations, get in touch about a commercial license (dual licensing).
