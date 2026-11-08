@@ -21,11 +21,9 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-56 bg-surface border-r border-border flex flex-col z-30">
-      <div className="h-14 flex items-center gap-2.5 px-5 border-b border-border">
-        <Shield className="w-6 h-6 text-accent" />
-        <span className="text-base font-semibold tracking-tight">
-          Moqesh <span className="text-accent">AI</span>
-        </span>
+      <div className="h-14 flex items-center gap-2.5 px-4 border-b border-border">
+        <img src="/animal-pot-logo.svg" alt="Animal Pot logo" className="w-9 h-9 rounded-md object-cover" />
+        <span className="text-base font-semibold tracking-tight">Animal <span className="text-accent">Pot</span></span>
       </div>
       <nav className="flex-1 py-3 px-3 space-y-0.5">
         {navItems.map(({ to, icon: Icon, label }) => (
