@@ -2,13 +2,14 @@ import { handleLure, isLureRequest } from "./lures";
 import {
   deleteExpiredOutbox,
   deliverOutbox,
-  enqueueAlert,
+  enqueueAlertWithEvent,
   processPendingAlerts,
 } from "./alerts";
 import {
   deleteExpiredEvents,
   recordEvent,
   type EventDatabase,
+  type EventInput,
   type EventType,
 } from "./events";
 import {
@@ -252,20 +253,32 @@ async function persistLureResult(
     : result.event.route === "env-file"
     ? "unconfirmed_lure_view"
     : "invalid_key_attempt";
-  const event = await persistEvent({
+  const event: Omit<EventInput, "installationId"> & { installationId: string | undefined } = {
     installationId: env.INSTALLATION_ID,
     type: eventType,
     route: result.event.route,
     sourceIp: result.event.source,
     confirmed: result.event.confirmed,
-  }, env);
-  if (!event || !result.alert) return;
+  };
+  if (!result.alert) {
+    await persistEvent(event, env);
+    return;
+  }
+  const installationId = env.INSTALLATION_ID;
+  if (!env.EVENTS_DB || !installationId) {
+    console.error("D1 event storage is unavailable; alert was not persisted");
+    return;
+  }
 
   let queued;
   try {
-    queued = await enqueueAlert(env.EVENTS_DB!, event, result.alert);
+    queued = await enqueueAlertWithEvent(
+      env.EVENTS_DB,
+      { ...event, installationId },
+      result.alert,
+    );
   } catch {
-    console.error("D1 webhook outbox persistence failed; alert was not dispatched");
+    console.error("D1 event and webhook outbox transaction failed; alert was not dispatched");
     return;
   }
   if (!queued.dispatchImmediately) return;

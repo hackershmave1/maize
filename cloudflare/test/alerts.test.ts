@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import {
   deliverOutbox,
   enqueueAlert,
+  enqueueAlertWithEvent,
   processPendingAlerts,
 } from "../src/alerts";
 import worker, { type Env } from "../src";
@@ -193,6 +194,33 @@ it("sends the first alert immediately and groups later events into one five-minu
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+it("does not leave an alert event persisted when its outbox transaction fails", async () => {
+  const failingDatabase = {
+    prepare: database.prepare.bind(database),
+    batch: async () => {
+      throw new Error("outbox transaction failed");
+    },
+  };
+
+  await expect(enqueueAlertWithEvent(
+    failingDatabase,
+    {
+      installationId,
+      type: "confirmed_reuse",
+      route: "bait-api",
+      sourceIp,
+      confirmed: true,
+    },
+    confirmation,
+    2_000_000_000_000,
+  )).rejects.toThrow("outbox transaction failed");
+
+  const rows = await database.prepare(
+    "SELECT id FROM events WHERE installation_id = ? AND type = 'confirmed_reuse'",
+  ).bind(installationId).all();
+  expect(rows.results).toHaveLength(0);
 });
 
 it("retains failed delivery and retries with the same idempotency key only until success", async () => {

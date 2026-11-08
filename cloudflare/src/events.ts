@@ -40,11 +40,10 @@ export interface EventDatabase {
 
 export const EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 
-export async function recordEvent(
-  database: EventDatabase,
+export function createEventRecord(
   input: EventInput,
   now = Date.now(),
-): Promise<EventRecord> {
+): EventRecord {
   if (!input.installationId.trim()) {
     throw new Error("Installation ID is required to record an event");
   }
@@ -64,7 +63,14 @@ export async function recordEvent(
     confirmed: input.confirmed,
     createdAt: now,
   };
-  await database.prepare(
+  return event;
+}
+
+export function prepareEventInsert(
+  database: EventDatabase,
+  event: EventRecord,
+): D1PreparedStatement {
+  return database.prepare(
     `INSERT INTO events (
       id, installation_id, type, route, source_ip, confirmed, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -76,7 +82,16 @@ export async function recordEvent(
     event.sourceIp,
     event.confirmed ? 1 : 0,
     event.createdAt,
-  ).run();
+  );
+}
+
+export async function recordEvent(
+  database: EventDatabase,
+  input: EventInput,
+  now = Date.now(),
+): Promise<EventRecord> {
+  const event = createEventRecord(input, now);
+  await prepareEventInsert(database, event).run();
   return event;
 }
 

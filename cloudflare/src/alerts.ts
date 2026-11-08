@@ -2,9 +2,11 @@ import type { LureAlert } from "./lures";
 import type {
   D1PreparedStatement,
   D1Result,
+  EventInput,
   EventDatabase,
   EventRecord,
 } from "./events";
+import { createEventRecord, prepareEventInsert } from "./events";
 
 export const ALERT_GROUP_WINDOW_MS = 5 * 60 * 1_000;
 export const ALERT_MAX_ATTEMPTS = 8;
@@ -51,18 +53,35 @@ export async function enqueueAlert(
   alert: LureAlert,
   now = Date.now(),
 ): Promise<QueuedAlert> {
+  return enqueueAlertTransaction(database, event, alert, now);
+}
+
+export async function enqueueAlertWithEvent(
+  database: AlertDatabase,
+  input: EventInput,
+  alert: LureAlert,
+  now = Date.now(),
+): Promise<QueuedAlert & { event: EventRecord }> {
+  const event = createEventRecord(input, now);
+  const queued = await enqueueAlertTransaction(database, event, alert, now, true);
+  return { ...queued, event };
+}
+
+async function enqueueAlertTransaction(
+  database: AlertDatabase,
+  event: EventRecord,
+  alert: LureAlert,
+  now: number,
+  includeEvent = false,
+): Promise<QueuedAlert> {
   const outboxId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
   const payload: AlertPayload = {
     installationId: event.installationId,
     alerts: [toAlert(event, alert)],
   };
-  // D1 batch is a transaction: appends, group creation, and slot reservation
-  // cannot interleave with another enqueue or delivery claim.
-  const results = await alertTransaction<{
-    id: string;
-    dispatch_immediately: number;
-  }>(database, [
+  const statements = [
+    ...(includeEvent ? [prepareEventInsert(database, event)] : []),
     database.prepare(
       `INSERT INTO runtime_settings (installation_id)
         VALUES (?) ON CONFLICT(installation_id) DO NOTHING`,
@@ -106,8 +125,14 @@ export async function enqueueAlert(
           SELECT pending_outbox_id FROM runtime_settings WHERE installation_id = ?
         )`,
     ).bind(outboxId, now, event.installationId),
-  ]);
-  const queued = results[4]?.results[0];
+  ];
+  // D1 batch is a transaction: appends, group creation, and slot reservation
+  // cannot interleave with another enqueue or delivery claim.
+  const results = await alertTransaction<{
+    id: string;
+    dispatch_immediately: number;
+  }>(database, statements);
+  const queued = results[statements.length - 1]?.results[0];
   if (!queued) throw new Error("D1 alert transaction did not persist an outbox group");
   return {
     outboxId: queued.id,
