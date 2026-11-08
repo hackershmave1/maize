@@ -1,13 +1,17 @@
-# Moqesh AI
+# Animal Pot
 
-<!-- Replace `juliourena/moqesh` with the repo's real GitHub slug (badge + GHCR, below). -->
-![CI](https://github.com/juliourena/moqesh/actions/workflows/ci.yml/badge.svg)
+![Animal Pot logo](web/public/animal-pot-logo.svg)
+
+AI HoneyPot Defense
 
 An open-source honeypot against **autonomous AI agents** that scan your
-infrastructure. Moqesh serves a **Token Exhaust labyrinth** (an infinite,
+infrastructure. Animal Pot serves a **Token Exhaust labyrinth** (an infinite,
 coherent maze of believable content) that traps automated agents, **drains
 their LLM's tokens**, profiles their behavior, and lets you detect and
 block them. A native **Python** project (FastAPI + SQLAlchemy).
+
+<!-- Replace `juliourena/moqesh` with the repo's real GitHub slug (badge + GHCR, below). -->
+![CI](https://github.com/juliourena/moqesh/actions/workflows/ci.yml/badge.svg)
 
 **Documentation:** [configuration](docs/CONFIGURATION.md) · [worldsmith (AI builder)](docs/WORLDSMITH.md)
 · [remote sensors](docs/SENSORS.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md)
@@ -95,7 +99,7 @@ Configuration via environment (`MOQESH_` prefix): see [`.env.example`](.env.exam
 
 ## Sensors (remote deployment)
 
-Moqesh can protect servers it does **not** live on, via *sensors*:
+Animal Pot can protect servers it does **not** live on, via *sensors*:
 
 - **Agent**: a self-contained binary that runs the full engine on the remote
   server (infinite labyrinth, credential/CTF gates) and sends signed telemetry.
@@ -173,7 +177,7 @@ Contributing: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 **AGPL-3.0-or-later**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). © 2026 Julio Ureña.
 
-Strong copyleft with a network clause: you may use, modify, and offer Moqesh (even
+Strong copyleft with a network clause: you may use, modify, and offer Animal Pot (even
 commercially), but if you distribute a modified version **or offer it as a network
 service**, you must publish its source code under AGPL-3.0 and retain attribution. For
 proprietary/closed-source use without those obligations, get in touch about a commercial license (dual licensing).
