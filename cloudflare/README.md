@@ -16,7 +16,7 @@ IPs, event history, audit records, and webhook payloads expire within that
 window. A separate minimal containment index keeps a source discoverable until
 its Durable Object's recorded block expiry, even if its events expire first.
 This operational index is cleaned up by scheduled work after expiry and is
-bounded by the maximum supported containment lifetime (8 days, 2 hours).
+bounded by the maximum supported containment lifetime (7 days, 2 hours).
 Manual unblocks call the source's Durable Object and keep an audit record with
 the verified operator identity, request time, and result.
 
