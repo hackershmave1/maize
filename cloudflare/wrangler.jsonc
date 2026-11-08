@@ -8,5 +8,19 @@
       "binding": "ORIGIN",
       "service": "moqesh-origin"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AGENT_SESSIONS",
+        "class_name": "AgentSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentSession"]
+    }
   ]
 }
