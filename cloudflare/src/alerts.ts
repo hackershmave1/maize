@@ -1,6 +1,7 @@
 import type { LureAlert } from "./lures";
 import type {
   D1PreparedStatement,
+  D1Result,
   EventDatabase,
   EventRecord,
 } from "./events";
@@ -13,12 +14,7 @@ const MAX_PENDING_BATCH = 100;
 const STALE_SEND_MS = 60_000;
 
 interface AlertDatabase extends EventDatabase {
-  prepare(query: string): D1PreparedStatement;
-}
-
-interface RuntimeSetting {
-  last_alert_at: number | null;
-  pending_outbox_id: string | null;
+  batch?<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
 interface OutboxRecord {
@@ -54,73 +50,68 @@ export async function enqueueAlert(
   alert: LureAlert,
   now = Date.now(),
 ): Promise<QueuedAlert> {
-  const setting = await database.prepare(
-    `SELECT last_alert_at, pending_outbox_id
-      FROM runtime_settings WHERE installation_id = ?`,
-  ).bind(event.installationId).first<RuntimeSetting>();
-
-  if (setting?.pending_outbox_id) {
-    const pending = await getOutbox(database, setting.pending_outbox_id);
-    if (pending?.status === "pending" && pending.attempts === 0) {
-      const payload = JSON.parse(pending.payload_json) as AlertPayload;
-      payload.alerts.push(toAlert(event, alert));
-      const eventIds = JSON.parse(pending.event_ids_json) as string[];
-      eventIds.push(event.id);
-      await database.prepare(
-        `UPDATE webhook_outbox
-          SET event_ids_json = ?, payload_json = ?, updated_at = ?
-          WHERE id = ? AND status = 'pending' AND attempts = 0`,
-      ).bind(
-        JSON.stringify(eventIds),
-        JSON.stringify(payload),
-        now,
-        pending.id,
-      ).run();
-      return {
-        outboxId: pending.id,
-        dispatchImmediately: pending.next_attempt_at <= now,
-      };
-    }
-  }
-
-  const lastAlertAt = setting?.last_alert_at ?? null;
-  const sendNow = lastAlertAt === null || now >= lastAlertAt + ALERT_GROUP_WINDOW_MS;
-  const dueAt = sendNow ? now : lastAlertAt + ALERT_GROUP_WINDOW_MS;
   const outboxId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
   const payload: AlertPayload = {
     installationId: event.installationId,
     alerts: [toAlert(event, alert)],
   };
-  await database.prepare(
-    `INSERT INTO webhook_outbox (
-      id, installation_id, event_ids_json, payload_json, idempotency_key,
-      status, attempts, next_attempt_at, created_at, updated_at, last_error
-    ) VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, NULL)`,
-  ).bind(
-    outboxId,
-    event.installationId,
-    JSON.stringify([event.id]),
-    JSON.stringify(payload),
-    idempotencyKey,
-    dueAt,
-    now,
-    now,
-  ).run();
-
-  await database.prepare(
-    `INSERT INTO runtime_settings (installation_id, last_alert_at, pending_outbox_id)
-      VALUES (?, ?, ?)
-      ON CONFLICT(installation_id) DO UPDATE SET
-        last_alert_at = excluded.last_alert_at,
-        pending_outbox_id = excluded.pending_outbox_id`,
-  ).bind(
-    event.installationId,
-    sendNow ? now : lastAlertAt,
-    sendNow ? null : outboxId,
-  ).run();
-
-  return { outboxId, dispatchImmediately: sendNow };
+  // D1 batch is a transaction: appends, group creation, and slot reservation
+  // cannot interleave with another enqueue or delivery claim.
+  const results = await alertTransaction<{
+    id: string;
+    dispatch_immediately: number;
+  }>(database, [
+    database.prepare(
+      `INSERT INTO runtime_settings (installation_id)
+        VALUES (?) ON CONFLICT(installation_id) DO NOTHING`,
+    ).bind(event.installationId),
+    database.prepare(
+      `UPDATE webhook_outbox
+        SET event_ids_json = json_insert(event_ids_json, '$[#]', ?),
+          payload_json = json_insert(payload_json, '$.alerts[#]', json(?)),
+          updated_at = ?
+        WHERE id = (
+          SELECT pending_outbox_id FROM runtime_settings WHERE installation_id = ?
+        ) AND status = 'pending' AND attempts = 0
+          AND NOT EXISTS (SELECT 1 FROM json_each(event_ids_json) WHERE value = ?)`,
+    ).bind(event.id, JSON.stringify(toAlert(event, alert)), now, event.installationId, event.id),
+    database.prepare(
+      `INSERT INTO webhook_outbox (
+        id, installation_id, event_ids_json, payload_json, idempotency_key,
+        status, attempts, next_attempt_at, created_at, updated_at, last_error
+      )
+      SELECT ?, installation_id, ?, ?, ?, 'pending', 0,
+        CASE WHEN last_alert_at IS NULL THEN ?
+          ELSE MAX(?, last_alert_at + ?) END, ?, ?, NULL
+      FROM runtime_settings WHERE installation_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM webhook_outbox WHERE id = pending_outbox_id
+            AND status = 'pending' AND attempts = 0
+        )`,
+    ).bind(
+      outboxId, JSON.stringify([event.id]), JSON.stringify(payload), idempotencyKey,
+      now, now, ALERT_GROUP_WINDOW_MS, now, now, event.installationId,
+    ),
+    database.prepare(
+      `UPDATE runtime_settings
+        SET last_alert_at = (SELECT next_attempt_at FROM webhook_outbox WHERE id = ?),
+          pending_outbox_id = ?
+        WHERE installation_id = ? AND EXISTS (SELECT 1 FROM webhook_outbox WHERE id = ?)`,
+    ).bind(outboxId, outboxId, event.installationId, outboxId),
+    database.prepare(
+      `SELECT id, (id = ? AND next_attempt_at <= ?) AS dispatch_immediately
+        FROM webhook_outbox WHERE id = (
+          SELECT pending_outbox_id FROM runtime_settings WHERE installation_id = ?
+        )`,
+    ).bind(outboxId, now, event.installationId),
+  ]);
+  const queued = results[4]?.results[0];
+  if (!queued) throw new Error("D1 alert transaction did not persist an outbox group");
+  return {
+    outboxId: queued.id,
+    dispatchImmediately: queued.dispatch_immediately === 1,
+  };
 }
 
 export async function processPendingAlerts(
@@ -164,27 +155,26 @@ export async function deliverOutbox(
   webhookUrl: string | undefined,
   now = Date.now(),
 ): Promise<boolean> {
-  const outbox = await getOutbox(database, outboxId);
-  if (
-    !outbox
-    || outbox.status !== "pending"
-    || outbox.next_attempt_at > now
-  ) {
-    return false;
-  }
-
-  const attempts = outbox.attempts + 1;
-  const claim = await database.prepare(
-    `UPDATE webhook_outbox
-      SET status = 'sending', attempts = ?, updated_at = ?
-      WHERE id = ? AND status = 'pending'`,
-  ).bind(attempts, now, outboxId).run();
-  if (claim.meta?.changes === 0) return false;
-  await database.prepare(
-    `UPDATE runtime_settings
-      SET last_alert_at = ?, pending_outbox_id = NULL
-      WHERE installation_id = ? AND pending_outbox_id = ?`,
-  ).bind(now, outbox.installation_id, outboxId).run();
+  // RETURNING snapshots the payload at the claim, not before a concurrent append.
+  const [claim] = await alertTransaction<OutboxRecord>(database, [
+    database.prepare(
+      `UPDATE webhook_outbox
+        SET status = 'sending', attempts = attempts + 1, updated_at = ?
+        WHERE id = ? AND status = 'pending' AND next_attempt_at <= ?
+        RETURNING id, installation_id, event_ids_json, payload_json, idempotency_key,
+          status, attempts, next_attempt_at`,
+    ).bind(now, outboxId, now),
+    database.prepare(
+      `UPDATE runtime_settings
+        SET last_alert_at = MAX(last_alert_at, ?), pending_outbox_id = NULL
+        WHERE pending_outbox_id = ? AND EXISTS (
+          SELECT 1 FROM webhook_outbox WHERE id = ? AND status = 'sending'
+        )`,
+    ).bind(now, outboxId, outboxId),
+  ]);
+  const outbox = claim?.results[0];
+  if (!outbox) return false;
+  const attempts = outbox.attempts;
 
   try {
     const destination = validateWebhookUrl(webhookUrl);
@@ -227,15 +217,12 @@ export function backoffForAttempt(attempt: number): number {
   return Math.min(ALERT_BASE_BACKOFF_MS * 2 ** exponent, ALERT_MAX_BACKOFF_MS);
 }
 
-async function getOutbox(
+async function alertTransaction<T>(
   database: AlertDatabase,
-  id: string,
-): Promise<OutboxRecord | null> {
-  return database.prepare(
-    `SELECT id, installation_id, event_ids_json, payload_json, idempotency_key,
-      status, attempts, next_attempt_at
-      FROM webhook_outbox WHERE id = ?`,
-  ).bind(id).first<OutboxRecord>();
+  statements: D1PreparedStatement[],
+): Promise<D1Result<T>[]> {
+  if (!database.batch) throw new Error("Alert grouping requires transactional D1 batch support");
+  return database.batch<T>(statements);
 }
 
 function toAlert(event: EventRecord, alert: LureAlert): AlertPayload["alerts"][number] {
