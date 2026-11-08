@@ -155,10 +155,16 @@ nodeTest("secret provisioner uploads Worker secrets without printing their value
     "ALERT_WEBHOOK_URL",
     "LURE_KEY_SECRET",
   ]);
-  assert.deepEqual(Object.keys(payload.secrets.LURE_KEY_SECRET), ["text"]);
-  assert.deepEqual(Object.keys(payload.secrets.ALERT_WEBHOOK_URL), ["text"]);
-  assert.equal(payload.secrets.LURE_KEY_SECRET.text, lureSecret);
-  assert.equal(payload.secrets.ALERT_WEBHOOK_URL.text, webhookUrl);
+  assert.deepEqual(payload.secrets.LURE_KEY_SECRET, {
+    name: "LURE_KEY_SECRET",
+    type: "secret_text",
+    text: lureSecret,
+  });
+  assert.deepEqual(payload.secrets.ALERT_WEBHOOK_URL, {
+    name: "ALERT_WEBHOOK_URL",
+    type: "secret_text",
+    text: webhookUrl,
+  });
   assert.match(calls[1].url, /\/workers\/scripts\/moqesh-cloudflare\/secrets$/);
   assert.equal(calls[1].init.method, "GET");
   assert.equal(logged.join("\n").includes(lureSecret), false);

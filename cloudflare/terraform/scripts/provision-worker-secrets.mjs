@@ -45,9 +45,13 @@ export async function provisionWorkerSecrets({
     body: JSON.stringify({
       secrets: {
         [lureKeySecretName]: {
+          name: lureKeySecretName,
+          type: "secret_text",
           text: lureKeySecret,
         },
         [alertWebhookSecretName]: {
+          name: alertWebhookSecretName,
+          type: "secret_text",
           text: alertWebhookUrl,
         },
       },
