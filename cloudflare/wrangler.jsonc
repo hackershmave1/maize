@@ -22,5 +22,16 @@
       "tag": "v1",
       "new_sqlite_classes": ["AgentSession"]
     }
-  ]
+  ],
+  "d1_databases": [
+    {
+      "binding": "EVENTS_DB",
+      "database_name": "moqesh-events",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
 }
