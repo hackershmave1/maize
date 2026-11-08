@@ -1,5 +1,14 @@
 import { handleLure, isLureRequest } from "./lures";
 import {
+  deleteExpiredAdminAudit,
+  handleAdminApiRequest,
+  isRuntimeAllowlisted,
+  readRuntimeSettings,
+  validateAccessAssertion,
+  type AdminActor,
+  type RuntimeSettings,
+} from "./admin-api";
+import {
   deleteExpiredOutbox,
   deliverOutbox,
   enqueueAlertWithEvent,
@@ -21,13 +30,21 @@ import {
 
 interface AgentSessionStub {
   getMode(): Promise<AgentSessionSnapshot>;
-  confirmKeyReuse(): Promise<AgentSessionSnapshot>;
+  unblock(): Promise<AgentSessionSnapshot>;
+  confirmKeyReuse(
+    mazeDurationMs?: number,
+    blockDurationMs?: number,
+  ): Promise<AgentSessionSnapshot>;
   recordMazeRequest(responseBudget: number): Promise<MazeRequestResult>;
 }
 
 interface AgentSessionNamespace {
   idFromName(name: string): unknown;
   get(id: unknown): AgentSessionStub;
+}
+
+interface WorkerAssets {
+  fetch(request: Request): Promise<Response>;
 }
 
 export interface Env {
@@ -44,6 +61,13 @@ export interface Env {
   ALERT_CONFIRMATION?: string;
   EVENTS_DB?: EventDatabase;
   ALERT_WEBHOOK_URL?: string;
+  ADMIN_HOSTNAME?: string;
+  ADMIN_ROUTE?: string;
+  PUBLIC_SITE_HOSTNAME?: string;
+  PUBLIC_ROUTE?: string;
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_AUD?: string;
+  ASSETS?: WorkerAssets;
 }
 
 interface WorkerExecutionContext {
@@ -57,6 +81,7 @@ interface ScheduledControllerLike {
 
 const DEFAULT_RESPONSE_BUDGET = 100;
 const MAZE_DECOY_BODY = '{"error":"Not found"}';
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 export default {
   async fetch(
@@ -64,18 +89,51 @@ export default {
     env: Env,
     context?: WorkerExecutionContext,
   ): Promise<Response> {
+    const requestUrl = new URL(request.url);
+    const hostname = requestUrl.hostname.toLowerCase();
+    const adminHostname = env.ADMIN_HOSTNAME?.trim().toLowerCase();
+    const isAdminApi = requestUrl.pathname === "/api/admin"
+      || requestUrl.pathname.startsWith("/api/admin/");
+    if (isAdminApi) {
+      if (!adminHostname || hostname !== adminHostname || requestUrl.protocol !== "https:") {
+        return adminErrorResponse(404, "Not found");
+      }
+      const actor = await authenticatedActor(request, env);
+      if (!actor) return adminErrorResponse(401, "Authentication required");
+      return handleAdminApiRequest(request, env, actor);
+    }
+    if (adminHostname && hostname === adminHostname) {
+      if (requestUrl.protocol !== "https:") {
+        return adminErrorResponse(404, "Not found");
+      }
+      const actor = await authenticatedActor(request, env);
+      if (!actor) return adminErrorResponse(401, "Authentication required");
+      if (!env.ASSETS) return adminErrorResponse(404, "Dashboard assets unavailable");
+      try {
+        return await serveDashboardAsset(request, env.ASSETS);
+      } catch {
+        console.error("Admin dashboard asset request failed");
+        return adminErrorResponse(503, "Dashboard unavailable");
+      }
+    }
+
     const lureRequest = isLureRequest(request, env);
     const sourceIp = normalizeSourceIp(request.headers.get("CF-Connecting-IP"));
-    const allowlisted = sourceIp !== null && isAllowlisted(sourceIp, env);
+    const allowlisted = sourceIp !== null && await isAllowlisted(sourceIp, env);
+    const settings = lureRequest ? await runtimeSettings(env) : undefined;
+    if (lureRequest && settings?.luresEnabled === false) {
+      const disabled = await handleLure(request, env, { enabled: false });
+      return disabled.response;
+    }
 
     if (allowlisted) {
       if (!lureRequest) return env.ORIGIN.fetch(request);
-      return serveLure(request, env, context);
+      return serveLure(request, env, context, allowlisted, settings);
     }
 
     if (sourceIp === null) {
       if (!lureRequest) return env.ORIGIN.fetch(request);
-      return serveLure(request, env, context);
+      return serveLure(request, env, context, false, settings);
     }
 
     let session: AgentSessionStub;
@@ -86,7 +144,7 @@ export default {
     } catch {
       reportStateError();
       return lureRequest
-        ? serveLure(request, env, context)
+        ? serveLure(request, env, context, false, settings)
         : env.ORIGIN.fetch(request);
     }
 
@@ -96,12 +154,17 @@ export default {
     }
     if (mode.mode === "maze") {
       if (lureRequest) {
-        const result = await handleLure(request, env);
-        await persistLureResult(result, env, context);
+        const currentSettings = settings ?? await runtimeSettings(env);
+        const result = await handleLure(request, env, {
+          allowlisted: false,
+          enabled: currentSettings.luresEnabled,
+        });
+        await persistLureResult(result, env, context, currentSettings);
       }
       let throttled = false;
       try {
-        const result = await session.recordMazeRequest(responseBudget(env));
+        const currentSettings = settings ?? await runtimeSettings(env);
+        const result = await session.recordMazeRequest(currentSettings.responseBudget);
         throttled = result.throttled;
       } catch {
         reportStateError();
@@ -110,15 +173,22 @@ export default {
     }
 
     if (lureRequest) {
-      const result = await handleLure(request, env);
+      const currentSettings = settings ?? await runtimeSettings(env);
+      const result = await handleLure(request, env, {
+        allowlisted: false,
+        enabled: currentSettings.luresEnabled,
+      });
       if (result.event.confirmed) {
         try {
-          await session.confirmKeyReuse();
+          await session.confirmKeyReuse(
+            currentSettings.mazeDurationMinutes * 60_000,
+            currentSettings.blockDurationHours * 60 * 60_000,
+          );
         } catch {
           reportStateError();
         }
       }
-      await persistLureResult(result, env, context);
+      await persistLureResult(result, env, context, currentSettings);
       return result.response;
     }
 
@@ -135,11 +205,16 @@ export default {
       console.error("D1 event storage is unavailable; scheduled work was skipped");
       return;
     }
+    const settings = await runtimeSettings(env);
+    const retentionMs = settings.retentionDays * DAY_MS;
     context.waitUntil(Promise.all([
-      deleteExpiredEvents(database).catch(() => {
+      deleteExpiredEvents(database, Date.now(), retentionMs).catch(() => {
         console.error("D1 event retention cleanup failed");
       }),
-      deleteExpiredOutbox(database).catch(() => {
+      deleteExpiredAdminAudit(database, Date.now(), retentionMs).catch(() => {
+        console.error("D1 admin audit retention cleanup failed");
+      }),
+      deleteExpiredOutbox(database, Date.now(), retentionMs).catch(() => {
         console.error("D1 webhook outbox retention cleanup failed");
       }),
       processPendingAlerts(database, env.ALERT_WEBHOOK_URL).catch(() => {
@@ -166,10 +241,17 @@ async function getAgentSession(
   return env.AGENT_SESSIONS.get(env.AGENT_SESSIONS.idFromName(name));
 }
 
-function isAllowlisted(sourceIp: string, env: Env): boolean {
-  return (env.ALLOWLISTED_SOURCES ?? "")
+async function isAllowlisted(sourceIp: string, env: Env): Promise<boolean> {
+  const configured = (env.ALLOWLISTED_SOURCES ?? "")
     .split(",")
     .some((candidate) => normalizeSourceIp(candidate) === sourceIp);
+  if (configured) return true;
+  try {
+    return await isRuntimeAllowlisted(env.EVENTS_DB, env.INSTALLATION_ID, sourceIp);
+  } catch {
+    console.error("Allowlist lookup failed; preserving origin availability");
+    return true;
+  }
 }
 
 function responseBudget(env: Env): number {
@@ -177,6 +259,21 @@ function responseBudget(env: Env): number {
   return Number.isFinite(configured) && configured > 0
     ? configured
     : DEFAULT_RESPONSE_BUDGET;
+}
+
+async function runtimeSettings(env: Env): Promise<RuntimeSettings> {
+  return readRuntimeSettings(
+    env.EVENTS_DB,
+    env.INSTALLATION_ID,
+    {
+      luresEnabled: true,
+      mazeDurationMinutes: 15,
+      blockDurationHours: 24,
+      responseBudget: responseBudget(env),
+      alertGroupingMinutes: 5,
+      retentionDays: 30,
+    },
+  );
 }
 
 function mazeResponse(throttled: boolean, body = MAZE_DECOY_BODY): Response {
@@ -237,9 +334,17 @@ async function serveLure(
   request: Request,
   env: Env,
   context?: WorkerExecutionContext,
+  allowlisted = false,
+  settings?: RuntimeSettings,
 ): Promise<Response> {
-  const result = await handleLure(request, env);
-  await persistLureResult(result, env, context);
+  const currentSettings = settings ?? await runtimeSettings(env);
+  const result = await handleLure(request, env, {
+    enabled: currentSettings.luresEnabled,
+    allowlisted,
+  });
+  if (currentSettings.luresEnabled) {
+    await persistLureResult(result, env, context, currentSettings);
+  }
   return result.response;
 }
 
@@ -247,6 +352,14 @@ async function persistLureResult(
   result: Awaited<ReturnType<typeof handleLure>>,
   env: Env,
   context?: WorkerExecutionContext,
+  settings: RuntimeSettings = {
+    luresEnabled: true,
+    mazeDurationMinutes: 15,
+    blockDurationHours: 24,
+    responseBudget: DEFAULT_RESPONSE_BUDGET,
+    alertGroupingMinutes: 5,
+    retentionDays: 30,
+  },
 ): Promise<void> {
   const eventType: EventType = result.event.confirmed
     ? "confirmed_reuse"
@@ -276,6 +389,8 @@ async function persistLureResult(
       env.EVENTS_DB,
       { ...event, installationId },
       result.alert,
+      Date.now(),
+      settings.alertGroupingMinutes * 60_000,
     );
   } catch {
     console.error("D1 event and webhook outbox transaction failed; alert was not dispatched");
@@ -333,4 +448,55 @@ async function persistEvent(
     console.error("D1 event persistence failed; preserving the existing Worker response");
     return null;
   }
+}
+
+async function authenticatedActor(
+  request: Request,
+  env: Env,
+): Promise<AdminActor | null> {
+  try {
+    return await validateAccessAssertion(request, env);
+  } catch {
+    console.error("Admin identity verification failed");
+    return null;
+  }
+}
+
+function adminErrorResponse(status: number, message: string): Response {
+  return Response.json(
+    { error: message },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'self'",
+        "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+      },
+    },
+  );
+}
+
+async function serveDashboardAsset(
+  request: Request,
+  assets: WorkerAssets,
+): Promise<Response> {
+  const response = await assets.fetch(request);
+  const headers = new Headers(response.headers);
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  );
+  headers.set("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }

@@ -52,8 +52,9 @@ export async function enqueueAlert(
   event: EventRecord,
   alert: LureAlert,
   now = Date.now(),
+  groupWindowMs = ALERT_GROUP_WINDOW_MS,
 ): Promise<QueuedAlert> {
-  return enqueueAlertTransaction(database, event, alert, now);
+  return enqueueAlertTransaction(database, event, alert, now, false, groupWindowMs);
 }
 
 export async function enqueueAlertWithEvent(
@@ -61,9 +62,17 @@ export async function enqueueAlertWithEvent(
   input: EventInput,
   alert: LureAlert,
   now = Date.now(),
+  groupWindowMs = ALERT_GROUP_WINDOW_MS,
 ): Promise<QueuedAlert & { event: EventRecord }> {
   const event = createEventRecord(input, now);
-  const queued = await enqueueAlertTransaction(database, event, alert, now, true);
+  const queued = await enqueueAlertTransaction(
+    database,
+    event,
+    alert,
+    now,
+    true,
+    groupWindowMs,
+  );
   return { ...queued, event };
 }
 
@@ -73,6 +82,7 @@ async function enqueueAlertTransaction(
   alert: LureAlert,
   now: number,
   includeEvent = false,
+  groupWindowMs = ALERT_GROUP_WINDOW_MS,
 ): Promise<QueuedAlert> {
   const outboxId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
@@ -111,7 +121,7 @@ async function enqueueAlertTransaction(
         )`,
     ).bind(
       outboxId, JSON.stringify([event.id]), JSON.stringify(payload), idempotencyKey,
-      now, now, ALERT_GROUP_WINDOW_MS, now, now, event.installationId,
+      now, now, groupWindowMs, now, now, event.installationId,
     ),
     database.prepare(
       `UPDATE runtime_settings
@@ -185,13 +195,25 @@ export async function processPendingAlerts(
 export async function deleteExpiredOutbox(
   database: AlertDatabase,
   now = Date.now(),
+  retentionMs = 30 * 24 * 60 * 60 * 1_000,
 ): Promise<number> {
-  const cutoff = now - 30 * 24 * 60 * 60 * 1_000;
-  const result = await database.prepare(
-    `DELETE FROM webhook_outbox
-      WHERE created_at <= ? AND status IN ('delivered', 'dead')`,
-  ).bind(cutoff).run();
-  return result.meta?.changes ?? 0;
+  const maximumRetention = 30 * 24 * 60 * 60 * 1_000;
+  const boundedRetention = Number.isFinite(retentionMs)
+    ? Math.min(maximumRetention, Math.max(1, retentionMs))
+    : maximumRetention;
+  const cutoff = now - boundedRetention;
+  const results = await alertTransaction(database, [
+    database.prepare(
+      `UPDATE runtime_settings SET pending_outbox_id = NULL
+        WHERE pending_outbox_id IN (
+          SELECT id FROM webhook_outbox WHERE created_at <= ?
+        )`,
+    ).bind(cutoff),
+    database.prepare(
+      "DELETE FROM webhook_outbox WHERE created_at <= ?",
+    ).bind(cutoff),
+  ]);
+  return results[1]?.meta?.changes ?? 0;
 }
 
 export async function deliverOutbox(

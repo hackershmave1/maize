@@ -23,12 +23,21 @@ export interface LureResult {
   alert?: LureAlert;
 }
 
+export interface LureOptions {
+  enabled?: boolean;
+  allowlisted?: boolean;
+}
+
 export function isLureRequest(request: Request, env: Env): boolean {
   const { pathname } = new URL(request.url);
   return pathname === "/.env" || pathname === env.BAIT_API_PATH;
 }
 
-export async function handleLure(request: Request, env: Env): Promise<LureResult> {
+export async function handleLure(
+  request: Request,
+  env: Env,
+  options: LureOptions = {},
+): Promise<LureResult> {
   const path = new URL(request.url).pathname;
   const route: LureRoute = path === "/.env" ? "env-file" : "bait-api";
   const source = request.headers.get("CF-Connecting-IP");
@@ -38,10 +47,23 @@ export async function handleLure(request: Request, env: Env): Promise<LureResult
     source,
     confirmed: false,
   };
-  const allowlisted = source !== null
+  const allowlisted = options.allowlisted ?? (source !== null
     && (env.ALLOWLISTED_SOURCES ?? "")
       .split(",")
-      .some((candidate) => candidate.trim() === source);
+      .some((candidate) => candidate.trim() === source));
+
+  if (options.enabled === false) {
+    return {
+      response: new Response("Not found", {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      }),
+      event,
+    };
+  }
 
   if (route === "env-file") {
     if (!env.LURE_KEY_SECRET || !env.BAIT_API_PATH) {
@@ -63,7 +85,7 @@ export async function handleLure(request: Request, env: Env): Promise<LureResult
         },
       },
     );
-    if (allowlisted && env.ALERT_DIRECT_LURE === "true") {
+    if (allowlisted && source !== null && env.ALERT_DIRECT_LURE === "true") {
       return {
         response,
         event,
@@ -100,7 +122,7 @@ export async function handleLure(request: Request, env: Env): Promise<LureResult
       },
     },
   );
-  if (allowlisted && env.ALERT_CONFIRMATION === "true") {
+  if (allowlisted && source !== null && env.ALERT_CONFIRMATION === "true") {
     return {
       response,
       event,

@@ -44,7 +44,10 @@ export class AgentSessionState {
     });
   }
 
-  async confirmKeyReuse(): Promise<AgentSessionSnapshot> {
+  async confirmKeyReuse(
+    mazeDurationMs = MAZE_DURATION_MS,
+    blockDurationMs = BLOCK_DURATION_MS,
+  ): Promise<AgentSessionSnapshot> {
     return this.storage.transaction(async (storage) => {
       const currentTime = this.now();
       const current = await this.read(storage, currentTime);
@@ -52,8 +55,8 @@ export class AgentSessionState {
         ? {
           ...current,
           confirmedAt: currentTime,
-          mazeUntil: currentTime + MAZE_DURATION_MS,
-          blockUntil: currentTime + MAZE_DURATION_MS + BLOCK_DURATION_MS,
+          mazeUntil: currentTime + mazeDurationMs,
+          blockUntil: currentTime + mazeDurationMs + blockDurationMs,
           mazeRequests: 0,
           throttledRequests: 0,
         }
@@ -126,8 +129,11 @@ export class AgentSession extends DurableObject<AgentSessionEnvironment> {
     return this.session.getMode();
   }
 
-  confirmKeyReuse(): Promise<AgentSessionSnapshot> {
-    return this.session.confirmKeyReuse();
+  confirmKeyReuse(
+    mazeDurationMs?: number,
+    blockDurationMs?: number,
+  ): Promise<AgentSessionSnapshot> {
+    return this.session.confirmKeyReuse(mazeDurationMs, blockDurationMs);
   }
 
   recordMazeRequest(responseBudget: number): Promise<MazeRequestResult> {

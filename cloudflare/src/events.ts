@@ -125,8 +125,9 @@ export async function getEvent(
 export async function deleteExpiredEvents(
   database: EventDatabase,
   now = Date.now(),
+  retentionMs = EVENT_RETENTION_MS,
 ): Promise<number> {
-  const cutoff = now - EVENT_RETENTION_MS;
+  const cutoff = now - Math.min(EVENT_RETENTION_MS, Math.max(1, retentionMs));
   const result = await database.prepare(
     "DELETE FROM events WHERE created_at <= ?",
   ).bind(cutoff).run();

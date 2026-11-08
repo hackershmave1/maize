@@ -2,6 +2,7 @@ import { env as cloudflareEnv, createExecutionContext, waitOnExecutionContext } 
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import {
   deliverOutbox,
+  deleteExpiredOutbox,
   enqueueAlert,
   enqueueAlertWithEvent,
   processPendingAlerts,
@@ -194,6 +195,28 @@ it("sends the first alert immediately and groups later events into one five-minu
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+it("expires every outbox payload at the configured retention window", async () => {
+  const now = 2_000_000_000_000;
+  const retention = 14 * 24 * 60 * minute;
+  const expiredEvent = await createAlertEvent(now - retention - 1);
+  const expired = await enqueueAlert(database, expiredEvent, confirmation, now - retention - 1);
+  await database.prepare("UPDATE webhook_outbox SET status = 'delivered' WHERE id = ?")
+    .bind(expired.outboxId).run();
+  const recentEvent = await createAlertEvent(now - retention + 1);
+  const recent = await enqueueAlert(database, recentEvent, confirmation, now - retention + 1);
+
+  expect(await deleteExpiredOutbox(database, now, retention)).toBe(1);
+  const rows = await database.prepare(
+    "SELECT id FROM webhook_outbox WHERE installation_id = ? ORDER BY created_at",
+  ).bind(installationId).all<{ id: string }>();
+  const runtime = await database.prepare(
+    "SELECT pending_outbox_id FROM runtime_settings WHERE installation_id = ?",
+  ).bind(installationId).first<{ pending_outbox_id: string | null }>();
+
+  expect(rows.results.map((row) => row.id)).toEqual([recent.outboxId]);
+  expect(runtime?.pending_outbox_id).toBe(recent.outboxId);
 });
 
 it("does not leave an alert event persisted when its outbox transaction fails", async () => {
