@@ -29,3 +29,6 @@ build/
 # Static bundles generated at runtime + compiled agent binaries
 bundles/
 moqesh/agent/dist/
+
+# Git worktrees
+.worktrees/
