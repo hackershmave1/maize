@@ -242,3 +242,64 @@ it("atomically claims a local D1 group across concurrent delivery workers", asyn
     expect(payload.alerts.map((item: { eventId: string }) => item.eventId)).toEqual([event.id]);
   }
 });
+
+it("aborts a stalled webhook before stale recovery can start another active send", async () => {
+  const event = await createEvent();
+  const queued = await enqueueAlert(database, event, confirmation, now);
+  let releaseFirst!: (response: Response) => void;
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    activeFetches += 1;
+    maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+    if (fetchMock.mock.calls.length > 1) {
+      activeFetches -= 1;
+      return new Response("accepted", { status: 202 });
+    }
+
+    return new Promise<Response>((resolve, reject) => {
+      const signal = init?.signal;
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          activeFetches -= 1;
+          reject(new DOMException("Delivery timed out", "AbortError"));
+        }, { once: true });
+      } else {
+        releaseFirst = (response) => {
+          activeFetches -= 1;
+          resolve(response);
+        };
+      }
+    });
+  });
+  vi.useFakeTimers();
+  vi.stubGlobal("fetch", fetchMock);
+  const firstDelivery = deliverOutbox(
+    database,
+    queued.outboxId,
+    "https://hooks.test/moqesh",
+    now,
+  );
+
+  try {
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(firstSignal).toBeDefined();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(firstDelivery).resolves.toBe(false);
+    expect(firstSignal?.aborted).toBe(true);
+
+    await expect(processPendingAlerts(
+      database,
+      "https://hooks.test/moqesh",
+      now + 60_000,
+    )).resolves.toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(maxActiveFetches).toBe(1);
+  } finally {
+    releaseFirst?.(new Response("accepted", { status: 202 }));
+    await firstDelivery;
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});

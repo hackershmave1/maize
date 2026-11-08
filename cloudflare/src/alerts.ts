@@ -10,6 +10,7 @@ export const ALERT_GROUP_WINDOW_MS = 5 * 60 * 1_000;
 export const ALERT_MAX_ATTEMPTS = 8;
 export const ALERT_BASE_BACKOFF_MS = 30_000;
 export const ALERT_MAX_BACKOFF_MS = 60 * 60 * 1_000;
+export const ALERT_DELIVERY_TIMEOUT_MS = 30_000;
 const MAX_PENDING_BATCH = 100;
 const STALE_SEND_MS = 60_000;
 
@@ -175,6 +176,11 @@ export async function deliverOutbox(
   const outbox = claim?.results[0];
   if (!outbox) return false;
   const attempts = outbox.attempts;
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    ALERT_DELIVERY_TIMEOUT_MS,
+  );
 
   try {
     const destination = validateWebhookUrl(webhookUrl);
@@ -183,9 +189,11 @@ export async function deliverOutbox(
       redirect: "error",
       headers: {
         "Content-Type": "application/json",
+        // Receivers can deduplicate uncertain outcomes across retries.
         "Idempotency-Key": outbox.idempotency_key,
       },
       body: outbox.payload_json,
+      signal: controller.signal,
     });
     if (!response.ok) {
       throw new WebhookDeliveryError(`Webhook returned HTTP ${response.status}`);
@@ -209,6 +217,8 @@ export async function deliverOutbox(
     ).bind(status, retryAt, now, reason, outboxId).run();
     console.error("Webhook delivery failed; alert retained in D1 outbox");
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
