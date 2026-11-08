@@ -1,8 +1,10 @@
 import { handleLure, isLureRequest } from "./lures";
 import {
   deleteExpiredAdminAudit,
+  deleteExpiredContainmentSources,
   handleAdminApiRequest,
   isRuntimeAllowlisted,
+  persistContainmentSource,
   readRuntimeSettings,
   validateAccessAssertion,
   type AdminActor,
@@ -178,17 +180,19 @@ export default {
         allowlisted: false,
         enabled: currentSettings.luresEnabled,
       });
+      let containmentUntil: number | undefined;
       if (result.event.confirmed) {
         try {
-          await session.confirmKeyReuse(
+          const confirmed = await session.confirmKeyReuse(
             currentSettings.mazeDurationMinutes * 60_000,
             currentSettings.blockDurationHours * 60 * 60_000,
           );
+          containmentUntil = confirmed.blockUntil ?? undefined;
         } catch {
           reportStateError();
         }
       }
-      await persistLureResult(result, env, context, currentSettings);
+      await persistLureResult(result, env, context, currentSettings, containmentUntil);
       return result.response;
     }
 
@@ -214,6 +218,11 @@ export default {
       deleteExpiredAdminAudit(database, Date.now(), retentionMs).catch(() => {
         console.error("D1 admin audit retention cleanup failed");
       }),
+      ...(env.INSTALLATION_ID
+        ? [deleteExpiredContainmentSources(database, env.INSTALLATION_ID).catch(() => {
+          console.error("D1 containment index cleanup failed");
+        })]
+        : []),
       deleteExpiredOutbox(database, Date.now(), retentionMs).catch(() => {
         console.error("D1 webhook outbox retention cleanup failed");
       }),
@@ -360,7 +369,27 @@ async function persistLureResult(
     alertGroupingMinutes: 5,
     retentionDays: 30,
   },
+  containmentUntil?: number,
 ): Promise<void> {
+  if (
+    containmentUntil !== undefined
+    && result.event.confirmed
+    && result.event.source
+    && env.INSTALLATION_ID
+    && env.EVENTS_DB
+  ) {
+    try {
+      await persistContainmentSource(
+        env.EVENTS_DB,
+        env.INSTALLATION_ID,
+        result.event.source,
+        Date.now(),
+        containmentUntil,
+      );
+    } catch {
+      console.error("D1 containment source persistence failed");
+    }
+  }
   const eventType: EventType = result.event.confirmed
     ? "confirmed_reuse"
     : result.event.route === "env-file"

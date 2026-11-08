@@ -19,16 +19,18 @@ interface AuditEntry {
 
 export default function Containment() {
   const [blocks, setBlocks] = useState<ActiveBlock[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [error, setError] = useState("");
   const [busyIp, setBusyIp] = useState("");
 
   const refresh = useCallback(async () => {
     const [active, history] = await Promise.all([
-      api<{ blocks: ActiveBlock[] }>("/blocks"),
+      api<{ blocks: ActiveBlock[]; nextCursor: string | null }>("/blocks?limit=100"),
       api<{ entries: AuditEntry[] }>("/audit?limit=20"),
     ]);
     setBlocks(active.blocks);
+    setNextCursor(active.nextCursor);
     setAudit(history.entries);
   }, []);
 
@@ -37,6 +39,20 @@ export default function Containment() {
       setError(reason instanceof Error ? reason.message : "Could not load containment");
     });
   }, [refresh]);
+
+  async function loadMore() {
+    if (!nextCursor) return;
+    setError("");
+    try {
+      const page = await api<{ blocks: ActiveBlock[]; nextCursor: string | null }>(
+        `/blocks?limit=100&cursor=${encodeURIComponent(nextCursor)}`,
+      );
+      setBlocks((current) => [...current, ...page.blocks]);
+      setNextCursor(page.nextCursor);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load more containment");
+    }
+  }
 
   async function unblock(sourceIp: string) {
     if (!window.confirm(`Manually unblock ${sourceIp}? This action is recorded in the audit history.`)) {
@@ -97,6 +113,14 @@ export default function Containment() {
             </tbody>
           </table>
         </div>
+        {nextCursor && (
+          <div className="pagination">
+            <span>{blocks.length} active sources loaded</span>
+            <button className="button button-secondary" onClick={() => void loadMore()}>
+              Load more sources
+            </button>
+          </div>
+        )}
       </div>
       <div className="card table-card">
         <div className="card-heading"><div><h3>Operator audit</h3><p>Manual unblock history</p></div></div>

@@ -1,5 +1,9 @@
 export const MAZE_DURATION_MS = 15 * 60 * 1_000;
 export const BLOCK_DURATION_MS = 24 * 60 * 60 * 1_000;
+export const MAX_MAZE_DURATION_MS = 120 * 60 * 1_000;
+export const MAX_BLOCK_DURATION_MS = 168 * 60 * 60 * 1_000;
+export const MAX_CONTAINMENT_DURATION_MS =
+  MAX_MAZE_DURATION_MS + MAX_BLOCK_DURATION_MS;
 
 export type SessionMode = "ordinary" | "maze" | "blocked";
 

@@ -8,10 +8,15 @@ State-changing requests also require a same-origin HTTPS `Origin` header.
 Requests for admin APIs on other hostnames—including a `workers.dev` hostname—
 return 404 without reaching the origin.
 
-Runtime settings and the operator allowlist are stored in D1. The admin
-migration (`migrations/0002_admin.sql`) must be applied before attaching the
-Worker route. Retention can be reduced from the 30-day maximum; source IPs,
-event history, audit records, and webhook payloads expire within that window.
+Runtime settings and the operator allowlist are stored in D1. The admin and
+containment-index migrations (`migrations/0002_admin.sql` and
+`migrations/0003_containment_sources.sql`) must be applied before attaching the
+Worker route. Retention can be reduced from the 30-day maximum; event source
+IPs, event history, audit records, and webhook payloads expire within that
+window. A separate minimal containment index keeps a source discoverable until
+its Durable Object's recorded block expiry, even if its events expire first.
+This operational index is cleaned up by scheduled work after expiry and is
+bounded by the maximum supported containment lifetime (8 days, 2 hours).
 Manual unblocks call the source's Durable Object and keep an audit record with
 the verified operator identity, request time, and result.
 

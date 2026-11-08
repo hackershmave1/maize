@@ -1,5 +1,8 @@
 import type { Env } from "./index";
 import {
+  MAX_CONTAINMENT_DURATION_MS,
+  MAX_BLOCK_DURATION_MS,
+  MAX_MAZE_DURATION_MS,
   normalizeSourceIp,
   deriveAgentSessionName,
 } from "./session-state";
@@ -8,7 +11,6 @@ import type { EventDatabase, EventRecord } from "./events";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_PAGE_SIZE = 100;
-const MAX_ACTIVE_SOURCE_CANDIDATES = 1_000;
 const ACCESS_ASSERTION_HEADER = "Cf-Access-Jwt-Assertion";
 const ACCESS_CLOCK_SKEW_SECONDS = 30;
 const ACCESS_CERT_CACHE_MS = 5 * 60 * 1_000;
@@ -165,7 +167,7 @@ export async function handleAdminApiRequest(
         return await listAdminEvents(database, env.INSTALLATION_ID, url);
       case "/blocks":
         if (request.method !== "GET") return methodNotAllowed();
-        return await listActiveBlocks(database, env, now);
+        return await listActiveBlocks(database, env, now, url);
       case "/settings":
         if (request.method === "GET") {
           return jsonResponse({
@@ -266,6 +268,43 @@ export async function deleteExpiredAdminAudit(
   return result.meta?.changes ?? 0;
 }
 
+export async function persistContainmentSource(
+  database: EventDatabase,
+  installationId: string,
+  sourceIp: string,
+  now = Date.now(),
+  retainUntil = now + MAX_CONTAINMENT_DURATION_MS,
+): Promise<void> {
+  const normalizedSourceIp = normalizeSourceIp(sourceIp);
+  if (!normalizedSourceIp || !installationId) {
+    throw new Error("Invalid containment source");
+  }
+  await database.prepare(
+    `INSERT INTO containment_sources (
+      installation_id, source_ip, confirmed_at, retain_until
+    ) VALUES (?, ?, ?, ?)
+    ON CONFLICT(installation_id, source_ip) DO UPDATE SET
+      confirmed_at = excluded.confirmed_at,
+      retain_until = MAX(containment_sources.retain_until, excluded.retain_until)`,
+  ).bind(
+    installationId,
+    normalizedSourceIp,
+    now,
+    retainUntil,
+  ).run();
+}
+
+export async function deleteExpiredContainmentSources(
+  database: EventDatabase,
+  installationId: string,
+  now = Date.now(),
+): Promise<number> {
+  const result = await database.prepare(
+    "DELETE FROM containment_sources WHERE installation_id = ? AND retain_until <= ?",
+  ).bind(installationId, now).run();
+  return result.meta?.changes ?? 0;
+}
+
 async function listAdminEvents(
   database: AdminDatabase,
   installationId: string,
@@ -323,25 +362,35 @@ async function listActiveBlocks(
   database: AdminDatabase,
   env: Env,
   now: number,
+  url: URL,
 ): Promise<Response> {
   if (!env.AGENT_SESSIONS || !env.LURE_KEY_SECRET || !env.INSTALLATION_ID) {
     return errorResponse(503, "Containment state is unavailable");
   }
-  const candidates = await database.prepare(
-    `SELECT source_ip, MAX(created_at) AS created_at FROM events
-      WHERE installation_id = ? AND confirmed = 1 AND source_ip IS NOT NULL
-        AND created_at >= ?
-      GROUP BY source_ip ORDER BY created_at DESC LIMIT ?`,
-  ).bind(env.INSTALLATION_ID, now - 30 * DAY_MS, MAX_ACTIVE_SOURCE_CANDIDATES)
-    .all<{ source_ip: string; created_at: number }>();
+  const limit = parseBoundedInteger(url.searchParams.get("limit"), 50, 1, MAX_PAGE_SIZE);
+  if (limit === null) return errorResponse(400, "Invalid page size");
+  const cursorText = url.searchParams.get("cursor");
+  const cursor = cursorText === null ? null : decodeSourceCursor(cursorText);
+  if (cursorText !== null && !cursor) return errorResponse(400, "Invalid page cursor");
 
+  const candidates = await database.prepare(
+    `SELECT source_ip, confirmed_at FROM containment_sources
+      WHERE installation_id = ? AND retain_until > ? AND source_ip > ?
+      ORDER BY source_ip ASC LIMIT ?`,
+  ).bind(env.INSTALLATION_ID, now, cursor ?? "", limit + 1).all<{
+    source_ip: string;
+    confirmed_at: number;
+  }>();
+
+  const hasMore = candidates.results.length > limit;
+  const page = candidates.results.slice(0, limit);
   const blocks: {
     sourceIp: string;
     mode: "maze" | "blocked";
     confirmedAt: number;
     expiresAt: number;
   }[] = [];
-  for (const candidate of candidates.results) {
+  for (const candidate of page) {
     const sourceIp = normalizeSourceIp(candidate.source_ip);
     if (!sourceIp) continue;
     const sessionName = await deriveAgentSessionName(
@@ -361,12 +410,17 @@ async function listActiveBlocks(
       blocks.push({
         sourceIp,
         mode: snapshot.mode as "maze" | "blocked",
-        confirmedAt: snapshot.confirmedAt ?? candidate.created_at,
+        confirmedAt: snapshot.confirmedAt ?? candidate.confirmed_at,
         expiresAt,
       });
     }
   }
-  return jsonResponse({ blocks });
+  return jsonResponse({
+    blocks,
+    nextCursor: hasMore && page.length
+      ? encodeSourceCursor(page[page.length - 1].source_ip)
+      : null,
+  });
 }
 
 async function updateRuntimeSettings(
@@ -571,8 +625,16 @@ function deploymentSettings(env: Env): Record<string, unknown> {
 
 function validateRuntimeSettings(value: Record<string, unknown>): RuntimeSettings | null {
   if (typeof value.luresEnabled !== "boolean") return null;
-  const mazeDurationMinutes = boundedInteger(value.mazeDurationMinutes, 1, 120);
-  const blockDurationHours = boundedInteger(value.blockDurationHours, 1, 168);
+  const mazeDurationMinutes = boundedInteger(
+    value.mazeDurationMinutes,
+    1,
+    MAX_MAZE_DURATION_MS / 60_000,
+  );
+  const blockDurationHours = boundedInteger(
+    value.blockDurationHours,
+    1,
+    MAX_BLOCK_DURATION_MS / (60 * 60_000),
+  );
   const responseBudget = boundedInteger(value.responseBudget, 1, 10_000);
   const alertGroupingMinutes = boundedInteger(value.alertGroupingMinutes, 1, 60);
   const retentionDays = boundedInteger(value.retentionDays, 1, 30);
@@ -643,6 +705,21 @@ function decodeCursor(value: string): { createdAt: number; id: string } | null {
 
 function encodeCursor(createdAt: number, id: string): string {
   return encodeBase64Url(new TextEncoder().encode(JSON.stringify({ createdAt, id })));
+}
+
+function decodeSourceCursor(value: string): string | null {
+  if (value.length > 128) return null;
+  try {
+    const sourceIp = new TextDecoder("utf-8", { fatal: true })
+      .decode(decodeBase64Url(value));
+    return normalizeSourceIp(sourceIp) === sourceIp ? sourceIp : null;
+  } catch {
+    return null;
+  }
+}
+
+function encodeSourceCursor(sourceIp: string): string {
+  return encodeBase64Url(new TextEncoder().encode(sourceIp));
 }
 
 function parseBoundedInteger(

@@ -2,14 +2,17 @@ import { env as cloudflareEnv } from "cloudflare:test";
 import { beforeAll, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src";
 import {
+  deleteExpiredContainmentSources,
   handleAdminApiRequest,
+  persistContainmentSource,
   validateAccessAssertion,
   type AdminActor,
 } from "../src/admin-api";
-import { recordEvent, type EventDatabase } from "../src/events";
+import { deleteExpiredEvents, recordEvent, type EventDatabase } from "../src/events";
 import { deriveAgentSessionName } from "../src/session-state";
 import eventsSchema from "../migrations/0001_events.sql?raw";
 import adminSchema from "../migrations/0002_admin.sql?raw";
+import containmentSchema from "../migrations/0003_containment_sources.sql?raw";
 
 const database = (cloudflareEnv as { EVENTS_DB: EventDatabase }).EVENTS_DB;
 const installationId = "admin-api-test";
@@ -33,12 +36,14 @@ const assertionKeys = await crypto.subtle.generateKey(
 const publicJwk = await crypto.subtle.exportKey("jwk", assertionKeys.publicKey);
 
 beforeAll(async () => {
-  for (const schema of [eventsSchema, adminSchema]) {
+  for (const schema of [eventsSchema, adminSchema, containmentSchema]) {
     for (const statement of schema.split(";").map((part) => part.trim()).filter(Boolean)) {
       await database.prepare(statement).run();
     }
   }
   await database.prepare("DELETE FROM admin_audit WHERE installation_id = ?")
+    .bind(installationId).run();
+  await database.prepare("DELETE FROM containment_sources WHERE installation_id = ?")
     .bind(installationId).run();
   await database.prepare("DELETE FROM allowlisted_sources WHERE installation_id = ?")
     .bind(installationId).run();
@@ -198,6 +203,14 @@ it("lists active maze and block states with their expiry", async () => {
     mazeIp,
     "test-state-secret",
   );
+  const retainUntil = Date.now() + 10 * 24 * 60 * 60 * 1_000;
+  for (const [ip, confirmedAt] of [[sourceIp, 1_000], [mazeIp, 1_500]] as const) {
+    await database.prepare(
+      `INSERT INTO containment_sources (
+        installation_id, source_ip, confirmed_at, retain_until
+      ) VALUES (?, ?, ?, ?)`,
+    ).bind(installationId, ip, confirmedAt, retainUntil).run();
+  }
   const getMode = vi.fn(async () => ({
     mode: "blocked" as const,
     confirmedAt: 1_000,
@@ -249,6 +262,163 @@ it("lists active maze and block states with their expiry", async () => {
     confirmedAt: 1_500,
     expiresAt: 2_500,
   });
+});
+
+it("keeps an active block discoverable after its event expires", async () => {
+  const sourceIp = "198.51.100.61";
+  const confirmedAt = Date.now();
+  const blockUntil = confirmedAt + 5 * 24 * 60 * 60 * 1_000;
+  let confirmed = false;
+  const session = {
+    getMode: vi.fn(async () => ({
+      mode: confirmed ? "blocked" as const : "ordinary" as const,
+      confirmedAt: confirmed ? confirmedAt : null,
+      mazeUntil: confirmed ? confirmedAt + 24 * 60 * 60 * 1_000 : null,
+      blockUntil: confirmed ? blockUntil : null,
+      mazeRequests: 0,
+      throttledRequests: 0,
+    })),
+    confirmKeyReuse: vi.fn(async () => {
+      confirmed = true;
+      return {
+        mode: "maze" as const,
+        confirmedAt,
+        mazeUntil: confirmedAt + 24 * 60 * 60 * 1_000,
+        blockUntil,
+        mazeRequests: 0,
+        throttledRequests: 0,
+      };
+    }),
+    recordMazeRequest: vi.fn(),
+    unblock: vi.fn(),
+  };
+  const namespace = {
+    idFromName: vi.fn((name: string) => name),
+    get: vi.fn(() => session),
+  };
+  const env = createEnv({
+    AGENT_SESSIONS: namespace as unknown as Env["AGENT_SESSIONS"],
+    LURE_KEY_SECRET: "expired-event-index-secret",
+    BAIT_API_PATH: "/api/private/account",
+  });
+  const lureResponse = await worker.fetch(
+    new Request("https://site.example.test/.env", {
+      headers: { "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+  const key = (await lureResponse.text()).match(/^API_KEY=(.+)$/m)?.[1];
+  if (!key) throw new Error("The .env lure did not include a key");
+  await worker.fetch(
+    new Request("https://site.example.test/api/private/account", {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "CF-Connecting-IP": sourceIp,
+      },
+    }),
+    env,
+  );
+  await database.prepare(
+    "UPDATE events SET created_at = ? WHERE installation_id = ? AND source_ip = ?",
+  ).bind(confirmedAt - 2 * 24 * 60 * 60 * 1_000, installationId, sourceIp).run();
+  expect(await deleteExpiredEvents(
+    database,
+    confirmedAt,
+    24 * 60 * 60 * 1_000,
+  )).toBeGreaterThan(0);
+  const containment = await database.prepare(
+    "SELECT retain_until FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+  ).bind(installationId, sourceIp).first<{ retain_until: number }>();
+  expect(containment?.retain_until).toBe(blockUntil);
+
+  const response = await handleAdminApiRequest(
+    adminRequest("/blocks"),
+    env,
+    actor,
+    confirmedAt + 2 * 24 * 60 * 60 * 1_000,
+  );
+  const body = await response.json() as { blocks: { sourceIp: string }[] };
+
+  expect(response.status).toBe(200);
+  expect(body.blocks.some((block) => block.sourceIp === sourceIp)).toBe(true);
+});
+
+it("retains containment candidates through the maximum state lifetime and then expires them", async () => {
+  const now = 2_000_000_000_000;
+  const sourceIp = "198.51.100.62";
+  const retentionInstallationId = `${installationId}-retention`;
+  await persistContainmentSource(database, retentionInstallationId, sourceIp, now);
+  const stored = await database.prepare(
+    "SELECT confirmed_at, retain_until FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+  ).bind(retentionInstallationId, sourceIp).first<{ confirmed_at: number; retain_until: number }>();
+
+  expect(stored?.confirmed_at).toBe(now);
+  expect(stored?.retain_until).toBeGreaterThan(now + 7 * 24 * 60 * 60 * 1_000);
+  expect(await deleteExpiredContainmentSources(
+    database,
+    retentionInstallationId,
+    now + 7 * 24 * 60 * 60 * 1_000,
+  )).toBe(0);
+  expect(await deleteExpiredContainmentSources(
+    database,
+    retentionInstallationId,
+    stored!.retain_until,
+  )).toBe(1);
+});
+
+it("paginates all active sources when there are more than one thousand candidates", async () => {
+  const now = 2_000_000_000_000;
+  await database.prepare(
+    `WITH RECURSIVE sequence(value) AS (
+      SELECT 1 UNION ALL SELECT value + 1 FROM sequence WHERE value < 1005
+    )
+    INSERT INTO containment_sources (
+      installation_id, source_ip, confirmed_at, retain_until
+    )
+    SELECT ?, printf('198.18.%d.%d', CAST((value - 1) / 256 AS INTEGER), (value - 1) % 256),
+      ?, ? FROM sequence`,
+  ).bind(installationId, now - 1_000, now + 60_000).run();
+  const namespace = {
+    idFromName: vi.fn((name: string) => name),
+    get: vi.fn(() => ({
+      getMode: vi.fn(async () => ({
+        mode: "blocked" as const,
+        confirmedAt: now - 1_000,
+        mazeUntil: now,
+        blockUntil: now + 60_000,
+        mazeRequests: 0,
+        throttledRequests: 0,
+      })),
+      unblock: vi.fn(),
+    })),
+  };
+
+  const retrieved: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const query = new URLSearchParams({ limit: "100" });
+    if (cursor) query.set("cursor", cursor);
+    const response = await handleAdminApiRequest(
+      adminRequest(`/blocks?${query}`),
+      createEnv({
+        AGENT_SESSIONS: namespace as unknown as Env["AGENT_SESSIONS"],
+        LURE_KEY_SECRET: "pagination-state-secret",
+      }),
+      actor,
+      now,
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      blocks: { sourceIp: string }[];
+      nextCursor: string | null;
+    };
+    retrieved.push(...body.blocks.map((block) => block.sourceIp));
+    cursor = body.nextCursor;
+  } while (cursor);
+
+  expect(retrieved).toHaveLength(1005);
+  expect(new Set(retrieved).size).toBe(1005);
+  expect(namespace.get).toHaveBeenCalledTimes(1005);
 });
 
 it("validates and persists bounded runtime settings", async () => {
