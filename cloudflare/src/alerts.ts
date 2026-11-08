@@ -120,11 +120,30 @@ export async function processPendingAlerts(
   webhookUrl: string | undefined,
   now = Date.now(),
 ): Promise<number> {
-  await database.prepare(
-    `UPDATE webhook_outbox
-      SET status = 'pending', next_attempt_at = ?, updated_at = ?
-      WHERE status = 'sending' AND updated_at <= ?`,
-  ).bind(now, now, now - STALE_SEND_MS).run();
+  await alertTransaction(database, [
+    database.prepare(
+      `UPDATE webhook_outbox
+        SET status = 'dead', updated_at = ?,
+          last_error = COALESCE(last_error, 'Maximum alert delivery attempts reached')
+        WHERE attempts >= ? AND (
+          status = 'pending'
+          OR (status = 'sending' AND updated_at <= ?)
+        )`,
+    ).bind(now, ALERT_MAX_ATTEMPTS, now - STALE_SEND_MS),
+    database.prepare(
+      `UPDATE runtime_settings
+        SET pending_outbox_id = NULL
+        WHERE pending_outbox_id IN (
+          SELECT id FROM webhook_outbox
+          WHERE status = 'dead' AND attempts >= ?
+        )`,
+    ).bind(ALERT_MAX_ATTEMPTS),
+    database.prepare(
+      `UPDATE webhook_outbox
+        SET status = 'pending', next_attempt_at = ?, updated_at = ?
+        WHERE status = 'sending' AND attempts < ? AND updated_at <= ?`,
+    ).bind(now, now, ALERT_MAX_ATTEMPTS, now - STALE_SEND_MS),
+  ]);
   const due = await database.prepare(
     `SELECT id FROM webhook_outbox
       WHERE status = 'pending' AND next_attempt_at <= ?
@@ -157,14 +176,27 @@ export async function deliverOutbox(
   now = Date.now(),
 ): Promise<boolean> {
   // RETURNING snapshots the payload at the claim, not before a concurrent append.
-  const [claim] = await alertTransaction<OutboxRecord>(database, [
+  const claimResults = await alertTransaction<OutboxRecord>(database, [
+    database.prepare(
+      `UPDATE webhook_outbox
+        SET status = 'dead', updated_at = ?,
+          last_error = COALESCE(last_error, 'Maximum alert delivery attempts reached')
+        WHERE id = ? AND status = 'pending' AND attempts >= ?`,
+    ).bind(now, outboxId, ALERT_MAX_ATTEMPTS),
+    database.prepare(
+      `UPDATE runtime_settings
+        SET pending_outbox_id = NULL
+        WHERE pending_outbox_id = ? AND EXISTS (
+          SELECT 1 FROM webhook_outbox WHERE id = ? AND status = 'dead'
+        )`,
+    ).bind(outboxId, outboxId),
     database.prepare(
       `UPDATE webhook_outbox
         SET status = 'sending', attempts = attempts + 1, updated_at = ?
-        WHERE id = ? AND status = 'pending' AND next_attempt_at <= ?
+        WHERE id = ? AND status = 'pending' AND attempts < ? AND next_attempt_at <= ?
         RETURNING id, installation_id, event_ids_json, payload_json, idempotency_key,
           status, attempts, next_attempt_at`,
-    ).bind(now, outboxId, now),
+    ).bind(now, outboxId, ALERT_MAX_ATTEMPTS, now),
     database.prepare(
       `UPDATE runtime_settings
         SET last_alert_at = MAX(last_alert_at, ?), pending_outbox_id = NULL
@@ -173,6 +205,7 @@ export async function deliverOutbox(
         )`,
     ).bind(now, outboxId, outboxId),
   ]);
+  const claim = claimResults[2];
   const outbox = claim?.results[0];
   if (!outbox) return false;
   const attempts = outbox.attempts;
@@ -210,11 +243,20 @@ export async function deliverOutbox(
     const reason = error instanceof WebhookDeliveryError
       ? error.safeMessage
       : "Webhook delivery failed";
-    await database.prepare(
-      `UPDATE webhook_outbox
-        SET status = ?, next_attempt_at = ?, updated_at = ?, last_error = ?
-        WHERE id = ? AND status = 'sending'`,
-    ).bind(status, retryAt, now, reason, outboxId).run();
+    await alertTransaction(database, [
+      database.prepare(
+        `UPDATE webhook_outbox
+          SET status = ?, next_attempt_at = ?, updated_at = ?, last_error = ?
+          WHERE id = ? AND status = 'sending'`,
+      ).bind(status, retryAt, now, reason, outboxId),
+      database.prepare(
+        `UPDATE runtime_settings
+          SET pending_outbox_id = NULL
+          WHERE pending_outbox_id = ? AND EXISTS (
+            SELECT 1 FROM webhook_outbox WHERE id = ? AND status = 'dead'
+          )`,
+      ).bind(outboxId, outboxId),
+    ]);
     console.error("Webhook delivery failed; alert retained in D1 outbox");
     return false;
   } finally {

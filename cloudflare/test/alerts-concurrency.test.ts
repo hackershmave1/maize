@@ -155,6 +155,102 @@ it("keeps concurrent retries bounded with the original idempotency key", async (
   }
 });
 
+it("marks a stale sending row at the attempt cap dead without retrying it", async () => {
+  const event = await createEvent();
+  const queued = await enqueueAlert(database, event, confirmation, now);
+  await database.prepare(
+    `UPDATE webhook_outbox
+      SET status = 'sending', attempts = ?, updated_at = ?
+      WHERE id = ?`,
+  ).bind(ALERT_MAX_ATTEMPTS, now - minute, queued.outboxId).run();
+  await database.prepare(
+    "UPDATE runtime_settings SET pending_outbox_id = ? WHERE installation_id = ?",
+  ).bind(queued.outboxId, installationId).run();
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response("accepted", { status: 202 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  try {
+    await expect(processPendingAlerts(database, "https://hooks.test/moqesh", now))
+      .resolves.toBe(0);
+    const row = await database.prepare(
+      `SELECT status, attempts FROM webhook_outbox WHERE id = ?`,
+    ).bind(queued.outboxId).first<{ status: string; attempts: number }>();
+    const settings = await database.prepare(
+      "SELECT pending_outbox_id FROM runtime_settings WHERE installation_id = ?",
+    ).bind(installationId).first<{ pending_outbox_id: string | null }>();
+    expect(row).toEqual({ status: "dead", attempts: ALERT_MAX_ATTEMPTS });
+    expect(settings?.pending_outbox_id).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(processPendingAlerts(
+      database,
+      "https://hooks.test/moqesh",
+      now + minute,
+    )).resolves.toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("marks a pending row at the attempt cap dead before scheduling it", async () => {
+  const event = await createEvent();
+  const queued = await enqueueAlert(database, event, confirmation, now);
+  await database.prepare(
+    `UPDATE webhook_outbox
+      SET attempts = ?, next_attempt_at = ?
+      WHERE id = ?`,
+  ).bind(ALERT_MAX_ATTEMPTS, now, queued.outboxId).run();
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response("accepted", { status: 202 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  try {
+    await expect(processPendingAlerts(database, "https://hooks.test/moqesh", now))
+      .resolves.toBe(0);
+    const row = await database.prepare(
+      "SELECT status, attempts FROM webhook_outbox WHERE id = ?",
+    ).bind(queued.outboxId).first<{ status: string; attempts: number }>();
+    expect(row).toEqual({ status: "dead", attempts: ALERT_MAX_ATTEMPTS });
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(processPendingAlerts(
+      database,
+      "https://hooks.test/moqesh",
+      now + minute,
+    )).resolves.toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("does not claim a pending row at the attempt cap when called directly", async () => {
+  const event = await createEvent();
+  const queued = await enqueueAlert(database, event, confirmation, now);
+  await database.prepare(
+    "UPDATE webhook_outbox SET attempts = ? WHERE id = ?",
+  ).bind(ALERT_MAX_ATTEMPTS, queued.outboxId).run();
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response("accepted", { status: 202 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  try {
+    await expect(deliverOutbox(
+      database,
+      queued.outboxId,
+      "https://hooks.test/moqesh",
+      now,
+    )).resolves.toBe(false);
+    const row = await database.prepare(
+      "SELECT status, attempts FROM webhook_outbox WHERE id = ?",
+    ).bind(queued.outboxId).first<{ status: string; attempts: number }>();
+    expect(row).toEqual({ status: "dead", attempts: ALERT_MAX_ATTEMPTS });
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it("serializes concurrent first-confirmed enqueues across sources in local D1", async () => {
   const events = await Promise.all(Array.from({ length: 12 }, (_, index) =>
     createEvent(now, index + 1)));
