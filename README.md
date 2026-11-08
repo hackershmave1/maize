@@ -1,6 +1,6 @@
 # Animal Pot
 
-![Animal Pot logo](web/public/animal-pot-logo.svg)
+![Animal Pot logo](web/public/animal-pot-logo.jpg)
 
 AI HoneyPot Defense
 
