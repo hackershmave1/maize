@@ -17,6 +17,13 @@ web/dist/
 web/.vite/
 cloudflare/node_modules/
 cloudflare/.wrangler-out/
+cloudflare/.dev.vars*
+cloudflare/terraform/.tools/
+cloudflare/terraform/.terraform/
+cloudflare/terraform/*.tfstate*
+cloudflare/terraform/*.tfvars
+cloudflare/terraform/*.auto.tfvars
+cloudflare/terraform/*.tfplan
 
 # Environment
 .env

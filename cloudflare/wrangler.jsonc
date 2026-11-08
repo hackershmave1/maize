@@ -3,6 +3,20 @@
   "name": "moqesh-cloudflare",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-08",
+  "vars": {
+    "INSTALLATION_ID": "local-development",
+    "MAZE_RESPONSE_BUDGET": "100",
+    "ALLOWLISTED_SOURCES": "",
+    "ALERT_DIRECT_LURE": "false",
+    "ALERT_CONFIRMATION": "true",
+    "BAIT_API_PATH": "/api/private/account",
+    "ADMIN_HOSTNAME": "admin.example.invalid",
+    "ADMIN_ROUTE": "admin.example.invalid/*",
+    "PUBLIC_SITE_HOSTNAME": "site.example.invalid",
+    "PUBLIC_ROUTE": "site.example.invalid/*",
+    "ACCESS_TEAM_DOMAIN": "team.example.invalid",
+    "ACCESS_AUD": "local-development-audience"
+  },
   "assets": {
     "directory": "./dashboard/dist",
     "binding": "ASSETS",
