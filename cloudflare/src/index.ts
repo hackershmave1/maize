@@ -151,6 +151,7 @@ export default {
     }
 
     if (mode.mode === "blocked") {
+      await reconcileContainmentSource(sourceIp, mode, env);
       await persistBlockEvent(sourceIp, env);
       return blockedResponse();
     }
@@ -258,8 +259,34 @@ async function isAllowlisted(sourceIp: string, env: Env): Promise<boolean> {
   try {
     return await isRuntimeAllowlisted(env.EVENTS_DB, env.INSTALLATION_ID, sourceIp);
   } catch {
-    console.error("Allowlist lookup failed; preserving origin availability");
-    return true;
+    console.error("Allowlist lookup failed; continuing with containment checks");
+    return false;
+  }
+}
+
+async function reconcileContainmentSource(
+  sourceIp: string,
+  state: AgentSessionSnapshot,
+  env: Env,
+): Promise<void> {
+  if (
+    state.confirmedAt === null
+    || state.blockUntil === null
+    || !env.EVENTS_DB
+    || !env.INSTALLATION_ID
+  ) {
+    return;
+  }
+  try {
+    await persistContainmentSource(
+      env.EVENTS_DB,
+      env.INSTALLATION_ID,
+      sourceIp,
+      state.confirmedAt,
+      state.blockUntil,
+    );
+  } catch {
+    console.error("D1 containment source persistence failed");
   }
 }
 

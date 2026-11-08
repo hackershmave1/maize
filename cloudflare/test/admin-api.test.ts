@@ -9,7 +9,10 @@ import {
   type AdminActor,
 } from "../src/admin-api";
 import { deleteExpiredEvents, recordEvent, type EventDatabase } from "../src/events";
-import { deriveAgentSessionName } from "../src/session-state";
+import {
+  deriveAgentSessionName,
+  type AgentSessionSnapshot,
+} from "../src/session-state";
 import eventsSchema from "../migrations/0001_events.sql?raw";
 import adminSchema from "../migrations/0002_admin.sql?raw";
 import containmentSchema from "../migrations/0003_containment_sources.sql?raw";
@@ -364,6 +367,151 @@ it("retains containment candidates through the maximum state lifetime and then e
     retentionInstallationId,
     stored!.retain_until,
   )).toBe(1);
+});
+
+it("reconciles an active block after its initial containment index write fails", async () => {
+  const sourceIp = "198.51.100.63";
+  await database.prepare(
+    "DELETE FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+  ).bind(installationId, sourceIp).run();
+
+  const now = Date.now();
+  const confirmedAt = now;
+  const mazeUntil = now + 60_000;
+  const blockUntil = now + 24 * 60 * 60 * 1_000;
+  let state: AgentSessionSnapshot = {
+    mode: "ordinary",
+    confirmedAt: null,
+    mazeUntil: null,
+    blockUntil: null,
+    mazeRequests: 0,
+    throttledRequests: 0,
+  };
+  const session = {
+    getMode: vi.fn(async () => state),
+    confirmKeyReuse: vi.fn(async () => {
+      state = {
+        mode: "maze",
+        confirmedAt,
+        mazeUntil,
+        blockUntil,
+        mazeRequests: 0,
+        throttledRequests: 0,
+      };
+      return state;
+    }),
+    recordMazeRequest: vi.fn(),
+    unblock: vi.fn(),
+  };
+  const namespace = {
+    idFromName: vi.fn((name: string) => name),
+    get: vi.fn(() => session),
+  };
+  let failContainmentWrite = true;
+  const flakyDatabase = {
+    prepare(query: string) {
+      const statement = database.prepare(query);
+      return {
+        bind(...values: unknown[]) {
+          const bound = statement.bind(...values);
+          return {
+            first: bound.first.bind(bound),
+            all: bound.all.bind(bound),
+            run: async () => {
+              if (failContainmentWrite && query.includes("INSERT INTO containment_sources")) {
+                failContainmentWrite = false;
+                throw new Error("temporary D1 write failure");
+              }
+              return bound.run();
+            },
+          };
+        },
+      };
+    },
+  } as unknown as EventDatabase;
+  const env = createEnv({
+    EVENTS_DB: flakyDatabase,
+    AGENT_SESSIONS: namespace as unknown as Env["AGENT_SESSIONS"],
+    LURE_KEY_SECRET: "reconciliation-test-secret",
+    BAIT_API_PATH: "/api/private/account",
+  });
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+  try {
+    const lure = await worker.fetch(
+      new Request("https://site.example.test/.env", {
+        headers: { "CF-Connecting-IP": sourceIp },
+      }),
+      env,
+    );
+    const key = (await lure.text()).match(/^API_KEY=(.+)$/m)?.[1];
+    if (!key) throw new Error("The .env lure did not include a key");
+
+    await worker.fetch(
+      new Request("https://site.example.test/api/private/account", {
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "CF-Connecting-IP": sourceIp,
+        },
+      }),
+      env,
+    );
+    expect(await database.prepare(
+      "SELECT source_ip FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+    ).bind(installationId, sourceIp).first()).toBeNull();
+
+    state = {
+      mode: "blocked",
+      confirmedAt,
+      mazeUntil,
+      blockUntil,
+      mazeRequests: 0,
+      throttledRequests: 0,
+    };
+    const blocked = await worker.fetch(
+      new Request("https://site.example.test/private/data", {
+        headers: { "CF-Connecting-IP": sourceIp },
+      }),
+      env,
+    );
+    const indexed = await database.prepare(
+      "SELECT source_ip, confirmed_at, retain_until FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+    ).bind(installationId, sourceIp).first<{
+      source_ip: string;
+      confirmed_at: number;
+      retain_until: number;
+    }>();
+    const listed = await handleAdminApiRequest(
+      adminRequest("/blocks"),
+      env,
+      actor,
+      now + 1_000,
+    );
+    const listedBody = await listed.json() as { blocks: { sourceIp: string }[] };
+
+    expect(blocked.status).toBe(403);
+    expect(indexed).toEqual({
+      source_ip: sourceIp,
+      confirmed_at: confirmedAt,
+      retain_until: blockUntil,
+    });
+    expect(listedBody.blocks).toContainEqual({
+      sourceIp,
+      mode: "blocked",
+      confirmedAt,
+      expiresAt: blockUntil,
+    });
+    expect(error).toHaveBeenCalledWith("D1 containment source persistence failed");
+    expect(error.mock.calls.flat().join(" ")).not.toContain(sourceIp);
+  } finally {
+    error.mockRestore();
+    await database.prepare(
+      "DELETE FROM containment_sources WHERE installation_id = ? AND source_ip = ?",
+    ).bind(installationId, sourceIp).run();
+    await database.prepare(
+      "DELETE FROM events WHERE installation_id = ? AND source_ip = ?",
+    ).bind(installationId, sourceIp).run();
+  }
 });
 
 it("paginates all active sources when there are more than one thousand candidates", async () => {

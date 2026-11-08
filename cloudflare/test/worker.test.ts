@@ -33,6 +33,7 @@ function createEnv(
   session = createSession(),
   options: {
     allowlisted?: string;
+    eventsDb?: Env["EVENTS_DB"];
     stateUnavailable?: boolean;
     responseBudget?: string;
   } = {},
@@ -58,6 +59,7 @@ function createEnv(
     LURE_KEY_SECRET: lureSecret,
     BAIT_API_PATH: baitApiPath,
     ALLOWLISTED_SOURCES: options.allowlisted,
+    EVENTS_DB: options.eventsDb,
     MAZE_RESPONSE_BUDGET: options.responseBudget ?? "2",
   } as unknown as Env;
   return { env, origin, namespace, session, sessionIdNames };
@@ -99,7 +101,15 @@ it("uses only CF-Connecting-IP and never trusts X-Forwarded-For", async () => {
 
 it("lets allowlisted ordinary requests bypass quarantine state", async () => {
   const session = createSession("blocked");
-  const { env, origin, namespace } = createEnv(session, { allowlisted: sourceIp });
+  const eventsDb = {
+    prepare: vi.fn(() => {
+      throw new Error("D1 unavailable");
+    }),
+  };
+  const { env, origin, namespace } = createEnv(session, {
+    allowlisted: sourceIp,
+    eventsDb: eventsDb as unknown as Env["EVENTS_DB"],
+  });
   const request = new Request("https://site.test/home", {
     headers: { "CF-Connecting-IP": sourceIp },
   });
@@ -109,6 +119,7 @@ it("lets allowlisted ordinary requests bypass quarantine state", async () => {
   expect(await response.text()).toBe("origin-ok");
   expect(origin.fetch).toHaveBeenCalledWith(request);
   expect(namespace.get).not.toHaveBeenCalled();
+  expect(eventsDb.prepare).not.toHaveBeenCalled();
 });
 
 it("keeps configured lures decoy-only for allowlisted sources", async () => {
@@ -209,6 +220,26 @@ it("denies blocked sources without reaching the origin", async () => {
   expect(response.status).toBe(403);
   expect(origin.fetch).not.toHaveBeenCalled();
   expect(session.recordMazeRequest).not.toHaveBeenCalled();
+});
+
+it("does not bypass blocked state when the dynamic allowlist lookup fails", async () => {
+  const eventsDb = {
+    prepare: vi.fn(() => {
+      throw new Error("D1 unavailable");
+    }),
+  };
+  const { env, origin } = createEnv(createSession("blocked"), {
+    eventsDb: eventsDb as unknown as Env["EVENTS_DB"],
+  });
+  const response = await worker.fetch(
+    new Request("https://site.test/private/data", {
+      headers: { "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+
+  expect(response.status).toBe(403);
+  expect(origin.fetch).not.toHaveBeenCalled();
 });
 
 it("throttles at the configured response budget with the bounded decoy", async () => {
