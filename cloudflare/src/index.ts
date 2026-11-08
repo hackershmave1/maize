@@ -74,7 +74,7 @@ export default {
       } catch {
         reportStateError();
       }
-      return mazeResponse(throttled);
+      return throttled ? cachedMazeThrottleResponse() : mazeResponse(false);
     }
 
     if (lureRequest) {
@@ -123,8 +123,8 @@ function responseBudget(env: Env): number {
     : DEFAULT_RESPONSE_BUDGET;
 }
 
-function mazeResponse(throttled: boolean): Response {
-  return new Response(MAZE_DECOY_BODY, {
+function mazeResponse(throttled: boolean, body = MAZE_DECOY_BODY): Response {
+  return new Response(body, {
     status: throttled ? 429 : 404,
     headers: {
       "Cache-Control": "no-store",
@@ -133,6 +133,34 @@ function mazeResponse(throttled: boolean): Response {
       ...(throttled ? { "Retry-After": "30" } : {}),
     },
   });
+}
+
+async function cachedMazeThrottleResponse(): Promise<Response> {
+  try {
+    const cache = (globalThis.caches as CacheStorage & { default?: Cache })
+      .default;
+    if (!cache) throw new Error("Workers Cache API is unavailable");
+
+    const key = new Request("https://moqesh-cache.invalid/maze-throttled-decoy");
+    let decoy = await cache.match(key);
+    if (!decoy) {
+      decoy = new Response(MAZE_DECOY_BODY, {
+        headers: {
+          "Cache-Control": "public, max-age=30",
+          "Content-Type": "application/json; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+      await cache.put(key, decoy.clone());
+    }
+
+    return mazeResponse(true, await decoy.text());
+  } catch {
+    console.error(
+      "Maze decoy cache unavailable; using uncached throttled response",
+    );
+    return mazeResponse(true);
+  }
 }
 
 function blockedResponse(): Response {

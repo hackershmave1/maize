@@ -236,6 +236,103 @@ it("throttles at the configured response budget with the bounded decoy", async (
   expect(origin.fetch).not.toHaveBeenCalled();
 });
 
+it("caches a bounded generic decoy without skipping maze accounting", async () => {
+  const session = createSession("maze");
+  session.recordMazeRequest.mockImplementation(async (budget: number) => ({
+    state: {
+      ...createSnapshot("maze"),
+      mazeRequests: budget,
+      throttledRequests: 1,
+    },
+    throttled: true,
+  }));
+  const { env } = createEnv(session, { responseBudget: "3" });
+  const entries = new Map<string, Response>();
+  const cacheMatch = vi.fn(async (key: Request | string) =>
+    entries.get(typeof key === "string" ? key : key.url)?.clone(),
+  );
+  const cachePut = vi.fn(async (key: Request | string, response: Response) => {
+    entries.set(typeof key === "string" ? key : key.url, response.clone());
+  });
+  vi.stubGlobal("caches", { default: { match: cacheMatch, put: cachePut } });
+
+  try {
+    const first = await worker.fetch(
+      new Request("https://site.test/private/data?secret=query-value", {
+        headers: { "CF-Connecting-IP": sourceIp },
+      }),
+      env,
+    );
+    const second = await worker.fetch(
+      new Request("https://site.test/another-path?key=sensitive-key", {
+        headers: { "CF-Connecting-IP": sourceIp },
+      }),
+      env,
+    );
+
+    expect(first.status).toBe(429);
+    expect(second.status).toBe(429);
+    expect(first.headers.get("Retry-After")).toBeTruthy();
+    expect(first.headers.get("Cache-Control")).toBe("no-store");
+    expect(await first.text()).toBe('{"error":"Not found"}');
+    expect(await second.text()).toBe('{"error":"Not found"}');
+    expect(session.recordMazeRequest).toHaveBeenCalledTimes(2);
+    expect(cacheMatch).toHaveBeenCalledTimes(2);
+    expect(cachePut).toHaveBeenCalledOnce();
+
+    const cacheKey = cachePut.mock.calls[0]?.[0];
+    expect(cacheKey).toBeInstanceOf(Request);
+    expect((cacheKey as Request).url).not.toContain(sourceIp);
+    expect((cacheKey as Request).url).not.toContain("secret");
+    expect((cacheKey as Request).url).not.toContain("sensitive-key");
+    const cachedDecoy = cachePut.mock.calls[0]?.[1];
+    expect(cachedDecoy?.headers.get("Cache-Control")).toBe("public, max-age=30");
+    expect(await cachedDecoy?.text()).toBe('{"error":"Not found"}');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("reports cache failure while keeping throttling enforced", async () => {
+  const session = createSession("maze");
+  session.recordMazeRequest.mockImplementation(async (budget: number) => ({
+    state: {
+      ...createSnapshot("maze"),
+      mazeRequests: budget,
+      throttledRequests: 1,
+    },
+    throttled: true,
+  }));
+  const { env } = createEnv(session, { responseBudget: "3" });
+  const cacheMatch = vi.fn(async () => {
+    throw new Error("cache unavailable");
+  });
+  const cachePut = vi.fn();
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.stubGlobal("caches", { default: { match: cacheMatch, put: cachePut } });
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://site.test/private/data", {
+        headers: { "CF-Connecting-IP": sourceIp },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBeTruthy();
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(session.recordMazeRequest).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith(
+      "Maze decoy cache unavailable; using uncached throttled response",
+    );
+    expect(cachePut).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+    error.mockRestore();
+  }
+});
+
 it("fails open for ordinary traffic but keeps lures decoy-only when state is unavailable", async () => {
   const { env, origin } = createEnv(createSession(), { stateUnavailable: true });
   const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
