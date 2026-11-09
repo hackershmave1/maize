@@ -69,7 +69,7 @@ function createEnv(
   return { env, origin, namespace, session, sessionIdNames };
 }
 
-function createEventsDatabase() {
+function createEventsDatabase(dispatchImmediately = true) {
   const statements: { sql: string; params: unknown[] }[] = [];
   const batches: { sql: string; params: unknown[] }[][] = [];
   const database = {
@@ -107,7 +107,7 @@ function createEventsDatabase() {
       })));
       return batch.map((_, index) => ({
         results: index === batch.length - 1
-          ? [{ id: "pending-outbox", dispatch_immediately: 1 }]
+          ? [{ id: "pending-outbox", dispatch_immediately: dispatchImmediately ? 1 : 0 }]
           : [],
         meta: { changes: 0 },
       }));
@@ -173,6 +173,35 @@ it("records confirmed lure events without queuing webhooks when delivery is disa
   expect(session.confirmKeyReuse).not.toHaveBeenCalled();
   expect(confirmedEvents).toHaveLength(1);
   expect(batches).toEqual([]);
+});
+
+it("keeps webhook queuing enabled when the setting is omitted", async () => {
+  const { database, batches } = createEventsDatabase(false);
+  const { env } = createEnv(createSession(), {
+    allowlisted: sourceIp,
+    alertConfirmation: "true",
+    eventsDb: database,
+  });
+  const lureResponse = await worker.fetch(
+    new Request("https://site.test/.env", {
+      headers: { "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+  const key = (await lureResponse.text()).match(/^API_KEY=(.+)$/m)?.[1];
+  if (!key) throw new Error("The .env lure did not include its synthetic key");
+
+  await worker.fetch(
+    new Request(`https://site.test${baitApiPath}`, {
+      headers: {
+        Authorization: "Bearer " + key,
+        "CF-Connecting-IP": sourceIp,
+      },
+    }),
+    env,
+  );
+
+  expect(batches.flat().some(({ sql }) => sql.includes("INSERT INTO webhook_outbox"))).toBe(true);
 });
 
 it("keeps containment and event persistence active when alerts are disabled", async () => {
