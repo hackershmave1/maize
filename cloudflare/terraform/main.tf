@@ -18,7 +18,24 @@ data "cloudflare_workers_routes" "existing" {
   zone_id = var.zone_id
 }
 
+data "cloudflare_workers_scripts" "staging_origin_candidates" {
+  count      = var.create_staging_origin ? 1 : 0
+  account_id = var.account_id
+  max_items  = 1000
+}
+
+data "cloudflare_workers_script" "existing_staging_origin" {
+  count       = var.create_staging_origin && length(local.staging_origin_collision_names) > 0 ? 1 : 0
+  account_id  = var.account_id
+  script_name = var.staging_origin_worker_name
+}
+
 locals {
+  staging_origin_owner_marker = "moqesh-staging-origin-owner:${sha256(var.installation_id)}"
+  staging_origin_collision_names = var.create_staging_origin ? [
+    for script in data.cloudflare_workers_scripts.staging_origin_candidates[0].result : script.id
+    if script.id == var.staging_origin_worker_name
+  ] : []
   target_hostnames = [var.protected_hostname, var.admin_hostname]
   existing_routes = [
     for route in data.cloudflare_workers_routes.existing.result : {
@@ -49,6 +66,22 @@ resource "terraform_data" "deployment_preflight" {
   }
 
   lifecycle {
+    precondition {
+      condition     = var.create_staging_origin ? length(data.cloudflare_workers_scripts.staging_origin_candidates[0].result) < 1000 : true
+      error_message = "The Worker script listing reached its safety limit; staging origin ownership cannot be checked exhaustively. Stop before uploading any Worker."
+    }
+
+    precondition {
+      condition = !var.create_staging_origin || (
+        length(trimspace(var.installation_id)) > 0 && length(local.staging_origin_owner_marker) > 0 &&
+        alltrue([
+          for script in data.cloudflare_workers_script.existing_staging_origin :
+          strcontains(coalesce(script.script, " "), "// ${local.staging_origin_owner_marker}\n")
+        ])
+      )
+      error_message = "An existing staging origin Worker lacks this installation's ownership marker; refusing to overwrite an unmanaged or differently owned Worker."
+    }
+
     precondition {
       condition     = lower(data.cloudflare_zone.target.account.id) == lower(var.account_id)
       error_message = "zone_id must identify a zone in account_id."
@@ -120,8 +153,7 @@ resource "cloudflare_workers_script" "staging_origin" {
   count              = var.create_staging_origin ? 1 : 0
   account_id         = var.account_id
   script_name        = var.staging_origin_worker_name
-  content_file       = "${path.module}/../staging-origin/worker.js"
-  content_sha256     = filesha256("${path.module}/../staging-origin/worker.js")
+  content            = replace(file("${path.module}/../staging-origin/worker.js"), "@@MOQESH_STAGING_ORIGIN_OWNER@@", local.staging_origin_owner_marker)
   main_module        = "worker.js"
   compatibility_date = "2026-11-08"
   assets = {

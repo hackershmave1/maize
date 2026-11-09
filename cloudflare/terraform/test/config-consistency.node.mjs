@@ -97,13 +97,42 @@ nodeTest("staging origin is opt-in and uploads only the configured private stati
   assert.match(origin, /count\s*=\s*var\.create_staging_origin \? 1 : 0/);
   assert.match(origin, /account_id\s*=\s*var\.account_id/);
   assert.match(origin, /script_name\s*=\s*var\.staging_origin_worker_name/);
-  assert.match(origin, /content_file\s*=\s*"\$\{path\.module\}\/\.\.\/staging-origin\/worker\.js"/);
-  assert.match(origin, /content_sha256\s*=\s*filesha256\("\$\{path\.module\}\/\.\.\/staging-origin\/worker\.js"\)/);
+  assert.match(origin, /content\s*=\s*replace\(file\("\$\{path\.module\}\/\.\.\/staging-origin\/worker\.js"\), "@@MOQESH_STAGING_ORIGIN_OWNER@@", local\.staging_origin_owner_marker\)/);
+  assert.doesNotMatch(origin, /\b(content_file|content_sha256)\s*=/);
+  const worker = await readFile(new URL("../../staging-origin/worker.js", import.meta.url), "utf8");
+  assert.match(worker, /^\/\/ @@MOQESH_STAGING_ORIGIN_OWNER@@\n/);
   assert.match(origin, /main_module\s*=\s*"worker\.js"/);
   assert.match(origin, /compatibility_date\s*=\s*"2026-11-08"/);
   assert.match(origin, /assets\s*=\s*\{\s*directory\s*=\s*"\$\{path\.module\}\/\.\.\/staging-origin\/site"/);
   assert.match(origin, /config\s*=\s*\{\s*binding\s*=\s*"ASSETS"\s*run_worker_first\s*=\s*true\s*not_found_handling\s*=\s*"404-page"/);
   assert.match(origin, /depends_on\s*=\s*\[terraform_data\.deployment_preflight\]/);
+});
+
+nodeTest("staging origin ownership is checked from existing source before any managed upload", async () => {
+  const main = await terraformFile("main.tf");
+  const scripts = main.match(/data "cloudflare_workers_scripts" "staging_origin_candidates" \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(scripts, /count\s*=\s*var\.create_staging_origin \? 1 : 0/);
+  assert.match(scripts, /account_id\s*=\s*var\.account_id/);
+  assert.match(scripts, /max_items\s*=\s*1000/);
+  assert.doesNotMatch(scripts, /\btags\s*=/);
+  assert.match(main, /staging_origin_owner_marker\s*=\s*"moqesh-staging-origin-owner:\$\{sha256\(var\.installation_id\)\}"/);
+  assert.match(main, /staging_origin_collision_names\s*=\s*var\.create_staging_origin \? \[\s*for script in data\.cloudflare_workers_scripts\.staging_origin_candidates\[0\]\.result : script\.id\s*if script\.id == var\.staging_origin_worker_name\s*\] : \[\]/);
+  const existing = main.match(/data "cloudflare_workers_script" "existing_staging_origin" \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(existing, /count\s*=\s*var\.create_staging_origin && length\(local\.staging_origin_collision_names\) > 0 \? 1 : 0/);
+  assert.match(existing, /account_id\s*=\s*var\.account_id/);
+  assert.match(existing, /script_name\s*=\s*var\.staging_origin_worker_name/);
+  const preflight = resourceBody(main, "terraform_data", "deployment_preflight");
+  assert.match(preflight, /condition\s*=\s*var\.create_staging_origin \? length\(data\.cloudflare_workers_scripts\.staging_origin_candidates\[0\]\.result\) < 1000 : true/);
+  assert.match(preflight, /condition\s*=\s*!var\.create_staging_origin \|\| \(\s*length\(trimspace\(var\.installation_id\)\) > 0 && length\(local\.staging_origin_owner_marker\) > 0 &&\s*alltrue\(\[\s*for script in data\.cloudflare_workers_script\.existing_staging_origin :\s*strcontains\(coalesce\(script\.script, " "\), "\/\/ \$\{local\.staging_origin_owner_marker\}\\n"\)\s*\]\)\s*\)/);
+  assert.match(preflight, /error_message\s*=\s*"[^"]*refusing to overwrite[^"]*"/);
+  assert.match(resourceBody(main, "cloudflare_workers_script", "staging_origin"), /depends_on\s*=\s*\[terraform_data\.deployment_preflight\]/);
+});
+
+nodeTest("staging name inequality is enforced only when origin creation is enabled", async () => {
+  const variables = await terraformFile("variables.tf");
+  const stagingName = variableBody(variables, "staging_origin_worker_name");
+  assert.match(stagingName, /&& \(!var\.create_staging_origin \|\| var\.staging_origin_worker_name != var\.worker_name\)/);
+  assert.doesNotMatch(stagingName, /&& var\.staging_origin_worker_name != var\.worker_name/);
 });
 
 nodeTest("ORIGIN selects the managed service and production environment only with explicit opt-in", async () => {

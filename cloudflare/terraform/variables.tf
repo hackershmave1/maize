@@ -56,13 +56,13 @@ variable "create_staging_origin" {
 }
 
 variable "staging_origin_worker_name" {
-  description = "Name reserved for the optional staging origin Worker; must differ from this installation's Worker."
+  description = "Name reserved for the optional staging origin Worker; must differ from this installation's Worker when enabled."
   type        = string
   default     = "moqesh-staging-origin"
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,58}[a-zA-Z0-9])?$", var.staging_origin_worker_name)) && var.staging_origin_worker_name != var.worker_name
-    error_message = "staging_origin_worker_name must be a Cloudflare-compatible Worker script name distinct from worker_name."
+    condition     = can(regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,58}[a-zA-Z0-9])?$", var.staging_origin_worker_name)) && (!var.create_staging_origin || var.staging_origin_worker_name != var.worker_name)
+    error_message = "staging_origin_worker_name must be a Cloudflare-compatible Worker script name and, when create_staging_origin is true, distinct from worker_name."
   }
 }
 
