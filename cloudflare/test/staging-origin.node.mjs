@@ -5,7 +5,6 @@ import vm from "node:vm";
 import * as engine from "../staging-origin/site/game-engine.js";
 import {
   advance,
-  consumeFrameTime,
   createGameState,
   intersects,
   jump,
@@ -46,27 +45,6 @@ test("game-over state stops advancing", () => {
   assert.deepEqual(advance(state, 16), state);
 });
 
-test("reduced motion batches small frame deltas into discrete updates", () => {
-  assert.deepEqual(consumeFrameTime(16, true), {
-    shouldUpdate: false,
-    deltaMs: 0,
-    accumulatedMs: 16,
-  });
-  assert.deepEqual(consumeFrameTime(18, true, 32), {
-    shouldUpdate: true,
-    deltaMs: 50,
-    accumulatedMs: 0,
-  });
-});
-
-test("normal motion continues updating on every frame", () => {
-  assert.deepEqual(consumeFrameTime(16, false, 32), {
-    shouldUpdate: true,
-    deltaMs: 16,
-    accumulatedMs: 0,
-  });
-});
-
 test("rectangle intersection detects only overlapping bounds", () => {
   assert.equal(
     intersects({ x: 0, y: 0, width: 10, height: 10 }, { x: 8, y: 8, width: 10, height: 10 }),
@@ -78,7 +56,7 @@ test("rectangle intersection detects only overlapping bounds", () => {
   );
 });
 
-function openGame(reducedMotion) {
+function openGame(reducedMotion, storage = new Map()) {
   const callbacks = new Map();
   const collisionChecks = [];
   const drawing = [];
@@ -123,7 +101,10 @@ function openGame(reducedMotion) {
     console,
     window: {
       matchMedia: () => preference,
-      localStorage: { getItem: () => null, setItem() {} },
+      localStorage: {
+        getItem: (key) => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
       requestAnimationFrame(callback) {
         scheduledFrames += 1;
         callbacks.set(++nextFrame, callback);
@@ -208,6 +189,42 @@ test("standard gameplay keeps its continuous frames and jump physics", () => {
   assert.equal(game.callbacks.size, 1);
   assert.ok(game.drawing.some(([method, x, y, width, height]) =>
     method === "fillRect" && x === 113 && y < 188 && width === 34 && height === 24));
+});
+
+test("reduced-motion turns reach a collision, preserve the earned score, and persist the best", () => {
+  const storage = new Map();
+  const game = openGame(true, storage);
+  game.start();
+  for (let turn = 0; turn < 20 && !game.elements.status.textContent.includes("hit"); turn += 1) {
+    game.key();
+  }
+
+  assert.match(game.elements.status.textContent, /hit.*Score 9.*Restart game/);
+  assert.equal(game.elements.score.textContent, "9");
+  assert.equal(game.elements["best-score"].textContent, "9");
+  assert.equal(storage.get("signal-sprint-best"), "9");
+  assert.equal(game.collisionChecks.length, 10);
+  assert.equal(game.collisionChecks.at(-1).collided, true);
+  assert.equal(game.scheduledFrames, 0);
+  assert.equal(game.callbacks.size, 0);
+
+  const drawingsAtGameOver = game.drawing.length;
+  game.key();
+  game.tap();
+  assert.equal(game.elements.score.textContent, "9");
+  assert.equal(game.collisionChecks.length, 10);
+  assert.equal(game.drawing.length, drawingsAtGameOver);
+
+  game.start();
+  assert.equal(game.elements.score.textContent, "0");
+  assert.equal(game.elements["best-score"].textContent, "9");
+  game.tap();
+  assert.equal(game.elements.score.textContent, "1");
+  assert.equal(game.collisionChecks.at(-1).collided, false);
+  game.start();
+  assert.equal(storage.get("signal-sprint-best"), "9");
+  const reloaded = openGame(true, storage);
+  assert.equal(reloaded.elements["best-score"].textContent, "9");
 });
 
 test("enabling reduced motion cancels animation and ignores an already queued frame", () => {

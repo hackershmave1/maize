@@ -19,6 +19,7 @@ const ROBOT_X = 108;
 const ROBOT_WIDTH = 44;
 const ROBOT_HEIGHT = 50;
 const MAX_FRAME_MS = 50;
+const TURN_JUMP_CLEARANCE = 90;
 const BEST_SCORE_KEY = "signal-sprint-best";
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const debrisPatterns = [
@@ -210,13 +211,16 @@ function spawnDebris() {
 function prepareTurn() {
   debris = [];
   spawnDebris();
-  debris[0].x = ROBOT_X + ROBOT_WIDTH + 40;
-  statusMessage.textContent = "Reduced-motion turn mode. Press Space, Arrow Up, or tap to clear one obstacle.";
+  const obstacle = debris[0];
+  obstacle.x = ROBOT_X + ROBOT_WIDTH + 40;
+  obstacle.height += Math.floor((debrisSequence - 1) / debrisPatterns.length) * 20;
+  obstacle.y = GROUND_Y - obstacle.height;
+  statusMessage.textContent = `Reduced-motion turn mode. Obstacles grow taller each cycle. Next height: ${obstacle.height}; jump clearance: ${TURN_JUMP_CLEARANCE}. Press Space, Arrow Up, or tap to attempt one obstacle.`;
 }
 
 function playTurn() {
   // Resolve the jump at its clearance height without moving or animating the robot.
-  const jumpingBounds = { ...playerBounds(), y: GROUND_Y - ROBOT_HEIGHT - 90 };
+  const jumpingBounds = { ...playerBounds(), y: GROUND_Y - ROBOT_HEIGHT - TURN_JUMP_CLEARANCE };
   const obstacleBounds = { ...debris[0], x: ROBOT_X };
   if (intersects(jumpingBounds, obstacleBounds)) {
     finishRun();
@@ -229,7 +233,7 @@ function playTurn() {
     score: gameState.score + 1,
   };
   prepareTurn();
-  statusMessage.textContent = `Obstacle cleared. Score ${gameState.score}. Jump to advance one turn.`;
+  statusMessage.textContent = `Obstacle cleared. Score ${gameState.score}. ${statusMessage.textContent}`;
   updateScoreDisplay();
   drawGame();
 }
