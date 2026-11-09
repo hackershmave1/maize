@@ -104,8 +104,25 @@ nodeTest("staging origin is opt-in and uploads only the configured private stati
   assert.match(origin, /main_module\s*=\s*"worker\.js"/);
   assert.match(origin, /compatibility_date\s*=\s*"2026-11-08"/);
   assert.match(origin, /assets\s*=\s*\{\s*directory\s*=\s*"\$\{path\.module\}\/\.\.\/staging-origin\/site"/);
-  assert.match(origin, /config\s*=\s*\{\s*binding\s*=\s*"ASSETS"\s*run_worker_first\s*=\s*true\s*not_found_handling\s*=\s*"404-page"/);
+  assert.match(origin, /config\s*=\s*\{\s*run_worker_first\s*=\s*true\s*not_found_handling\s*=\s*"404-page"/);
+  assert.match(origin, /bindings\s*=\s*\[\s*\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}\s*,?\s*\]/);
   assert.match(origin, /depends_on\s*=\s*\[terraform_data\.deployment_preflight\]/);
+});
+
+nodeTest("binding checker enforces the pinned provider staging assets schema", async () => {
+  const main = await terraformFile("main.tf");
+  const origin = resourceBody(main, "cloudflare_workers_script", "staging_origin");
+  const withoutBinding = origin.replace(/bindings\s*=\s*\[[\s\S]*?\]/, "");
+  const missingErrors = configModule.checkDeploymentBindings({}, main.replace(origin, withoutBinding));
+  assert.ok(missingErrors.some((error) => /staging origin.*ASSETS.*assets/.test(error)));
+
+  const wrongType = origin.replace(/type\s*=\s*"assets"/, 'type = "plain_text"');
+  const wrongTypeErrors = configModule.checkDeploymentBindings({}, main.replace(origin, wrongType));
+  assert.ok(wrongTypeErrors.some((error) => /staging origin.*ASSETS.*assets/.test(error)));
+
+  const nestedBinding = origin.replace(/config\s*=\s*\{/, 'config = {\n      binding = "ASSETS"');
+  const nestedErrors = configModule.checkDeploymentBindings({}, main.replace(origin, nestedBinding));
+  assert.ok(nestedErrors.some((error) => /5\.28\.1.*assets\.config\.binding/.test(error)));
 });
 
 nodeTest("staging origin ownership is checked from existing source before any managed upload", async () => {

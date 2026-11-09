@@ -159,10 +159,13 @@ resource "cloudflare_workers_script" "staging_origin" {
   content            = replace(file("${path.module}/../staging-origin/worker.js"), "@@MOQESH_STAGING_ORIGIN_OWNER@@", local.staging_origin_owner_marker)
   main_module        = "worker.js"
   compatibility_date = "2026-11-08"
+  bindings = [{
+    name = "ASSETS"
+    type = "assets"
+  }]
   assets = {
     directory = "${path.module}/../staging-origin/site"
     config = {
-      binding            = "ASSETS"
       run_worker_first   = true
       not_found_handling = "404-page"
     }

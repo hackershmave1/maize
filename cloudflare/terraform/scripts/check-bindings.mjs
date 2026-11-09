@@ -3,6 +3,12 @@ import { fileURLToPath } from "node:url";
 
 const WRANGLER_PLACEHOLDER_ID = "00000000-0000-0000-0000-000000000001";
 
+// cloudflare/terraform-provider-cloudflare v5.28.1 internal/services/workers_script/schema.go
+const ASSET_CONFIG_FIELDS = new Set([
+  "headers", "redirects", "html_handling", "not_found_handling",
+  "run_worker_first", "serve_directly", "base_path",
+]);
+
 export function checkDeploymentBindings(wrangler, terraform) {
   const errors = [];
   const terraformBindings = new Map(
@@ -38,6 +44,19 @@ export function checkDeploymentBindings(wrangler, terraform) {
   }
   if (!/assets\s*=\s*\{[\s\S]*?directory\s*=\s*"\$\{path\.module\}\/\.\.\/dashboard\/dist"[\s\S]*?run_worker_first\s*=\s*true/.test(terraform)) {
     errors.push("Terraform must upload dashboard/dist with run_worker_first enabled.");
+  }
+  const stagingOrigin = terraform.match(
+    /resource\s+"cloudflare_workers_script"\s+"staging_origin"\s*\{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  const stagingBindings = stagingOrigin.match(/\bbindings\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  if (!/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/.test(stagingBindings)) {
+    errors.push("Terraform staging origin must declare ASSETS in bindings with type assets (provider 5.28.1).");
+  }
+  const stagingAssetConfig = stagingOrigin.match(/\bassets\s*=\s*\{[\s\S]*?\bconfig\s*=\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+  for (const [, field] of stagingAssetConfig.matchAll(/^\s*(\w+)\s*=/gm)) {
+    if (!ASSET_CONFIG_FIELDS.has(field)) {
+      errors.push(`Cloudflare provider 5.28.1 does not support staging origin assets.config.${field}.`);
+    }
   }
 
   for (const name of Object.keys(wrangler.vars ?? {})) {
