@@ -1,6 +1,5 @@
 import {
   advance,
-  consumeFrameTime,
   createGameState,
   intersects,
   jump,
@@ -32,7 +31,6 @@ let gameState = createGameState();
 let debris = [];
 let animationFrameId = null;
 let previousFrameTime = null;
-let accumulatedFrameMs = 0;
 let spawnElapsedMs = 0;
 let debrisSequence = 0;
 let bestScore = 0;
@@ -112,7 +110,7 @@ function drawBackground() {
 
 function drawRobot() {
   const top = GROUND_Y - ROBOT_HEIGHT + gameState.y;
-  const stride = gameState.running && !gameState.gameOver
+  const stride = !reducedMotionQuery.matches && gameState.running && !gameState.gameOver
     ? Math.floor(gameState.elapsedMs / 90) % 2
     : 0;
 
@@ -209,6 +207,33 @@ function spawnDebris() {
   });
 }
 
+function prepareTurn() {
+  debris = [];
+  spawnDebris();
+  debris[0].x = ROBOT_X + ROBOT_WIDTH + 40;
+  statusMessage.textContent = "Reduced-motion turn mode. Press Space, Arrow Up, or tap to clear one obstacle.";
+}
+
+function playTurn() {
+  // Resolve the jump at its clearance height without moving or animating the robot.
+  const jumpingBounds = { ...playerBounds(), y: GROUND_Y - ROBOT_HEIGHT - 90 };
+  const obstacleBounds = { ...debris[0], x: ROBOT_X };
+  if (intersects(jumpingBounds, obstacleBounds)) {
+    finishRun();
+    return;
+  }
+
+  gameState = {
+    ...gameState,
+    elapsedMs: gameState.elapsedMs + 100,
+    score: gameState.score + 1,
+  };
+  prepareTurn();
+  statusMessage.textContent = `Obstacle cleared. Score ${gameState.score}. Jump to advance one turn.`;
+  updateScoreDisplay();
+  drawGame();
+}
+
 function playerBounds() {
   return {
     x: ROBOT_X,
@@ -228,7 +253,7 @@ function finishRun() {
 }
 
 function frame(timestamp) {
-  if (!gameState.running || gameState.gameOver) return;
+  if (reducedMotionQuery.matches || !gameState.running || gameState.gameOver) return;
 
   if (previousFrameTime === null) {
     previousFrameTime = timestamp;
@@ -239,15 +264,8 @@ function frame(timestamp) {
 
   const rawDeltaMs = timestamp - previousFrameTime;
   previousFrameTime = timestamp;
-  const frameTime = consumeFrameTime(rawDeltaMs, reducedMotionQuery.matches, accumulatedFrameMs);
-  accumulatedFrameMs = frameTime.accumulatedMs;
-  if (!frameTime.shouldUpdate) {
-    animationFrameId = window.requestAnimationFrame(frame);
-    return;
-  }
-
-  const deltaMs = Math.min(Math.max(frameTime.deltaMs, 0), MAX_FRAME_MS);
-  gameState = advance(gameState, frameTime.deltaMs);
+  const deltaMs = Math.min(Math.max(rawDeltaMs, 0), MAX_FRAME_MS);
+  gameState = advance(gameState, rawDeltaMs);
 
   spawnElapsedMs += deltaMs;
   const spawnIntervalMs = Math.max(820, 1400 - gameState.score * 3);
@@ -277,25 +295,49 @@ function startGame() {
   if (animationFrameId !== null) {
     window.cancelAnimationFrame(animationFrameId);
   }
+  animationFrameId = null;
 
   gameState = { ...createGameState(), running: true };
   debris = [];
   previousFrameTime = null;
-  accumulatedFrameMs = 0;
   spawnElapsedMs = 0;
   debrisSequence = 0;
   restartButton.textContent = "Restart game";
   statusMessage.textContent = "Run started. Jump the signal debris.";
+  if (reducedMotionQuery.matches) prepareTurn();
   updateScoreDisplay();
   drawGame();
   canvas.focus();
-  animationFrameId = window.requestAnimationFrame(frame);
+  if (!reducedMotionQuery.matches) {
+    animationFrameId = window.requestAnimationFrame(frame);
+  }
 }
 
 function tryJump() {
   if (!gameState.running || gameState.gameOver) return;
+  if (reducedMotionQuery.matches) {
+    playTurn();
+    return;
+  }
   gameState = jump(gameState);
 }
+
+reducedMotionQuery.addEventListener("change", () => {
+  if (!gameState.running || gameState.gameOver) return;
+  if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
+  animationFrameId = null;
+  previousFrameTime = null;
+  spawnElapsedMs = 0;
+  gameState = { ...gameState, y: 0, velocityY: 0 };
+  debris = [];
+  if (reducedMotionQuery.matches) {
+    prepareTurn();
+  } else {
+    statusMessage.textContent = "Run started. Jump the signal debris.";
+    animationFrameId = window.requestAnimationFrame(frame);
+  }
+  drawGame();
+});
 
 canvas.addEventListener("keydown", (event) => {
   if (document.activeElement !== canvas) return;
