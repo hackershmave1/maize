@@ -2,6 +2,7 @@ account_id                      = "REPLACE_WITH_32_HEX_ACCOUNT_ID"
 zone_id                         = "REPLACE_WITH_32_HEX_ZONE_ID"
 protected_hostname              = "protected.example.invalid"
 admin_hostname                  = "admin.example.invalid"
+create_staging_origin           = false
 origin_service_name             = "existing-origin-worker"
 origin_service_environment      = "production"
 installation_id                 = "REPLACE_WITH_RANDOM_INSTALLATION_ID"

@@ -63,6 +63,16 @@ export function checkDeploymentBindings(wrangler, terraform) {
   if (!/resource\s+"cloudflare_workers_script_subdomain"\s+"disabled"\s*\{[\s\S]*?enabled\s*=\s*false[\s\S]*?previews_enabled\s*=\s*false/.test(terraform)) {
     errors.push("Terraform must disable both workers.dev and Worker preview URLs.");
   }
+  const stagingOriginSubdomain = terraform.match(
+    /resource\s+"cloudflare_workers_script_subdomain"\s+"staging_origin_disabled"\s*\{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  if (
+    !/\bcount\s*=\s*var\.create_staging_origin\s*\?\s*1\s*:\s*0\b/.test(stagingOriginSubdomain)
+    || !/\benabled\s*=\s*false\b/.test(stagingOriginSubdomain)
+    || !/\bpreviews_enabled\s*=\s*false\b/.test(stagingOriginSubdomain)
+  ) {
+    errors.push("Terraform staging origin must conditionally disable both workers.dev and Worker preview URLs with create_staging_origin.");
+  }
   const cronTrigger = terraform.match(
     /resource\s+"cloudflare_workers_cron_trigger"\s+"scheduled"\s*\{([\s\S]*?)\n\}/,
   )?.[1] ?? "";

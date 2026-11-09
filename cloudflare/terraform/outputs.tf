@@ -3,6 +3,11 @@ output "worker_name" {
   value       = cloudflare_workers_script.app.script_name
 }
 
+output "origin_service_name" {
+  description = "Selected ORIGIN Worker service name, whether managed staging or an existing external service."
+  value       = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name
+}
+
 output "events_database_id" {
   description = "Real Terraform-created D1 identifier used by both the Worker binding and migration runner."
   value       = cloudflare_d1_database.events.id

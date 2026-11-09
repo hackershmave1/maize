@@ -49,13 +49,30 @@ variable "worker_name" {
   }
 }
 
+variable "create_staging_origin" {
+  description = "Explicitly opt in to an isolated, private static staging origin Worker."
+  type        = bool
+  default     = false
+}
+
+variable "staging_origin_worker_name" {
+  description = "Name reserved for the optional staging origin Worker; must differ from this installation's Worker."
+  type        = string
+  default     = "moqesh-staging-origin"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,58}[a-zA-Z0-9])?$", var.staging_origin_worker_name)) && var.staging_origin_worker_name != var.worker_name
+    error_message = "staging_origin_worker_name must be a Cloudflare-compatible Worker script name distinct from worker_name."
+  }
+}
+
 variable "origin_service_name" {
-  description = "Name of the customer's existing origin Worker service binding. Terraform will not create or delete it."
+  description = "Existing customer origin Worker service name; may be empty when create_staging_origin selects the managed origin. Terraform does not manage external origins."
   type        = string
 
   validation {
-    condition     = length(trimspace(var.origin_service_name)) > 0 && var.origin_service_name != var.worker_name
-    error_message = "origin_service_name must name an existing service and must not point this Worker back to itself."
+    condition     = var.create_staging_origin || (length(trimspace(var.origin_service_name)) > 0 && var.origin_service_name != var.worker_name)
+    error_message = "Unless create_staging_origin is true, origin_service_name must name an existing service and must not point this Worker back to itself."
   }
 }
 

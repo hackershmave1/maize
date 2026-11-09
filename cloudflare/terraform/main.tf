@@ -116,6 +116,36 @@ resource "cloudflare_zero_trust_access_application" "admin" {
   depends_on = [terraform_data.deployment_preflight]
 }
 
+resource "cloudflare_workers_script" "staging_origin" {
+  count              = var.create_staging_origin ? 1 : 0
+  account_id         = var.account_id
+  script_name        = var.staging_origin_worker_name
+  content_file       = "${path.module}/../staging-origin/worker.js"
+  content_sha256     = filesha256("${path.module}/../staging-origin/worker.js")
+  main_module        = "worker.js"
+  compatibility_date = "2026-11-08"
+  assets = {
+    directory = "${path.module}/../staging-origin/site"
+    config = {
+      binding            = "ASSETS"
+      run_worker_first   = true
+      not_found_handling = "404-page"
+    }
+  }
+
+  depends_on = [terraform_data.deployment_preflight]
+}
+
+resource "cloudflare_workers_script_subdomain" "staging_origin_disabled" {
+  count            = var.create_staging_origin ? 1 : 0
+  account_id       = var.account_id
+  script_name      = var.staging_origin_worker_name
+  enabled          = false
+  previews_enabled = false
+
+  depends_on = [cloudflare_workers_script.staging_origin]
+}
+
 resource "cloudflare_workers_script" "app" {
   account_id         = var.account_id
   script_name        = var.worker_name
@@ -140,8 +170,8 @@ resource "cloudflare_workers_script" "app" {
     {
       name        = "ORIGIN"
       type        = "service"
-      service     = var.origin_service_name
-      environment = var.origin_service_environment
+      service     = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name
+      environment = var.create_staging_origin ? "production" : var.origin_service_environment
     },
     {
       name       = "AGENT_SESSIONS"
@@ -222,7 +252,7 @@ resource "cloudflare_workers_script" "app" {
 
   lifecycle {
     precondition {
-      condition     = var.origin_service_name != var.worker_name
+      condition     = (var.create_staging_origin ? var.staging_origin_worker_name : var.origin_service_name) != var.worker_name
       error_message = "The ORIGIN service binding must not route this Worker back to itself."
     }
   }
@@ -346,6 +376,7 @@ resource "cloudflare_workers_route" "public" {
     cloudflare_workers_route.admin,
     cloudflare_workers_cron_trigger.scheduled,
     cloudflare_workers_script_subdomain.disabled,
+    cloudflare_workers_script_subdomain.staging_origin_disabled,
   ]
 
   lifecycle {
