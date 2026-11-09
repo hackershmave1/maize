@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   advance,
+  consumeFrameTime,
   createGameState,
   intersects,
   jump,
@@ -40,6 +41,27 @@ test("the player returns to ground after the jump", () => {
 test("game-over state stops advancing", () => {
   const state = { ...createGameState(), running: true, gameOver: true };
   assert.deepEqual(advance(state, 16), state);
+});
+
+test("reduced motion batches small frame deltas into discrete updates", () => {
+  assert.deepEqual(consumeFrameTime(16, true), {
+    shouldUpdate: false,
+    deltaMs: 0,
+    accumulatedMs: 16,
+  });
+  assert.deepEqual(consumeFrameTime(18, true, 32), {
+    shouldUpdate: true,
+    deltaMs: 50,
+    accumulatedMs: 0,
+  });
+});
+
+test("normal motion continues updating on every frame", () => {
+  assert.deepEqual(consumeFrameTime(16, false, 32), {
+    shouldUpdate: true,
+    deltaMs: 16,
+    accumulatedMs: 0,
+  });
 });
 
 test("rectangle intersection detects only overlapping bounds", () => {

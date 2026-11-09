@@ -1,5 +1,6 @@
 import {
   advance,
+  consumeFrameTime,
   createGameState,
   intersects,
   jump,
@@ -20,6 +21,7 @@ const ROBOT_WIDTH = 44;
 const ROBOT_HEIGHT = 50;
 const MAX_FRAME_MS = 50;
 const BEST_SCORE_KEY = "signal-sprint-best";
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const debrisPatterns = [
   { width: 34, height: 31, shape: "shard" },
   { width: 26, height: 40, shape: "pulse" },
@@ -30,6 +32,7 @@ let gameState = createGameState();
 let debris = [];
 let animationFrameId = null;
 let previousFrameTime = null;
+let accumulatedFrameMs = 0;
 let spawnElapsedMs = 0;
 let debrisSequence = 0;
 let bestScore = 0;
@@ -235,9 +238,16 @@ function frame(timestamp) {
   }
 
   const rawDeltaMs = timestamp - previousFrameTime;
-  const deltaMs = Math.min(Math.max(rawDeltaMs, 0), MAX_FRAME_MS);
   previousFrameTime = timestamp;
-  gameState = advance(gameState, rawDeltaMs);
+  const frameTime = consumeFrameTime(rawDeltaMs, reducedMotionQuery.matches, accumulatedFrameMs);
+  accumulatedFrameMs = frameTime.accumulatedMs;
+  if (!frameTime.shouldUpdate) {
+    animationFrameId = window.requestAnimationFrame(frame);
+    return;
+  }
+
+  const deltaMs = Math.min(Math.max(frameTime.deltaMs, 0), MAX_FRAME_MS);
+  gameState = advance(gameState, frameTime.deltaMs);
 
   spawnElapsedMs += deltaMs;
   const spawnIntervalMs = Math.max(820, 1400 - gameState.score * 3);
@@ -271,6 +281,7 @@ function startGame() {
   gameState = { ...createGameState(), running: true };
   debris = [];
   previousFrameTime = null;
+  accumulatedFrameMs = 0;
   spawnElapsedMs = 0;
   debrisSequence = 0;
   restartButton.textContent = "Restart game";

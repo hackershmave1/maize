@@ -1,6 +1,22 @@
 const GRAVITY = 1800;
 const JUMP_VELOCITY = -620;
 const MAX_FRAME_MS = 50;
+const REDUCED_MOTION_FRAME_MS = 50;
+
+export function consumeFrameTime(deltaMs, reducedMotion, accumulatedMs = 0) {
+  const frameDeltaMs = Math.max(deltaMs, 0);
+  const elapsedMs = accumulatedMs + frameDeltaMs;
+
+  if (reducedMotion && elapsedMs < REDUCED_MOTION_FRAME_MS) {
+    return { shouldUpdate: false, deltaMs: 0, accumulatedMs: elapsedMs };
+  }
+
+  return {
+    shouldUpdate: true,
+    deltaMs: reducedMotion ? elapsedMs : frameDeltaMs,
+    accumulatedMs: 0,
+  };
+}
 
 export function createGameState() {
   return {
