@@ -148,9 +148,11 @@ account/installation identity from another workspace or state. The ownership
 guard is a read-only Workers Scripts API lookup, not a cross-state lock. It
 requires `CLOUDFLARE_API_TOKEN` with Workers Scripts Read in addition to the
 existing apply credentials. It fails closed on API errors, invalid or
-ambiguous responses, or an origin not owned by this installation. Do not run
-the guard or make other real Cloudflare calls before the explicit deployment
-step and approval of the exact plan.
+ambiguous responses, or an origin not owned by this installation. Read-only
+DNS, route, and Access discovery and Terraform planning are allowed. Do not
+make Cloudflare writes or other resource-changing calls, run the ownership
+guard, or apply resources until the applicable exact plan and any separate DNS
+change have received explicit approval.
 
 The bootstrap plan uses `enable_public_route = false`: it includes the Moqesh
 staging resources and private static origin, but no public site route, DNS,

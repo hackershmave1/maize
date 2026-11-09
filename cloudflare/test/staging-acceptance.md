@@ -82,7 +82,7 @@ that a particular setting was deployed.
 | Alert grouping interval | NOT RUN |
 | Event/audit retention | NOT RUN |
 | Allowlist | NOT RUN |
-| Direct-lure alert binding | `false` in current Terraform |
+| Direct-lure alert binding | Expected: `false` in current Terraform; observed staging value: NOT RUN |
 
 For elapsed-time tests, use explicit staging-only durations within supported
 bounds and record them. The minimum maze duration is 1 minute and the minimum
