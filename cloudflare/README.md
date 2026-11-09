@@ -1,5 +1,35 @@
 # Cloudflare Worker and private dashboard
 
+## Traffic model
+
+The public Worker route is **whole-host**, not lure-path-only: after the
+staging or production route is explicitly enabled, Cloudflare invokes the
+Worker for every request to the selected protected hostname. For an
+allowlisted or otherwise uncontained source, an ordinary non-lure request is
+forwarded to the selected `ORIGIN` service; it is not sent into the decoy maze
+and is not written to event history. This pass-through still incurs Worker
+execution; non-allowlisted sources with a usable IP also incur a per-source
+state check. The configured `/.env` and `BAIT_API_PATH` are always intercepted
+by the Worker: enabled lures return decoys, while disabled lures return 404
+rather than reaching `ORIGIN`. A confirmed source receives decoy/maze or block
+responses across the whole hostname and is not forwarded to `ORIGIN`.
+
+If the public route is disabled, requests to the protected hostname do not
+invoke this Worker. Route only a dedicated staging hostname during acceptance;
+the production hostname remains untouched until staging is accepted and a
+separate production plan is reviewed and approved.
+
+The admin hostname is separate and Access-protected, but its route reaches the
+same Worker script and dashboard assets. Terraform does not deploy a second
+admin Worker.
+
+For the isolated Kurocyber staging runner, `ORIGIN` is a separate
+Terraform-managed static-origin Worker rather than the production site or an
+external origin. It serves only `staging.kurocyber.com`, and its hostname
+guard returns 404 for `workers.dev` and unknown hosts. Normal uncontained
+requests reach this origin through Moqesh's `ORIGIN` service binding; lure and
+contained-source responses are handled by Moqesh and do not reach the origin.
+
 The Worker serves the protected dashboard and `/api/admin/*` only when the
 request hostname exactly matches `ADMIN_HOSTNAME`. It verifies the
 `Cf-Access-Jwt-Assertion` signature against the configured
@@ -32,6 +62,11 @@ The Worker expects Terraform to configure `ADMIN_HOSTNAME`, `ADMIN_ROUTE`,
 `PUBLIC_SITE_HOSTNAME`, `PUBLIC_ROUTE`, `ACCESS_TEAM_DOMAIN`, and `ACCESS_AUD`.
 Keep `LURE_KEY_SECRET` and `ALERT_WEBHOOK_URL` in Cloudflare's secret store;
 the dashboard never returns either value.
+Terraform currently sets `ALERT_DIRECT_LURE = false`, so an allowlisted
+direct-lure request is recorded but does not send its own webhook alert or
+start containment. Confirmed-key alerts remain enabled. Do not expect
+direct-lure webhook alerts in staging unless a separately reviewed change
+makes that binding configurable.
 
 From this directory:
 
@@ -58,22 +93,94 @@ Object migration, the Moqesh D1 database and migrations, the dashboard Access
 application/policy, the Worker `workers.dev` setting, and the two explicitly
 named Worker routes.
 It does **not** create or edit DNS records, change unrelated routes, or create,
-replace, or delete the existing `ORIGIN` Worker service. `origin_service_name`
-must refer to that existing service.
+replace, or delete an external `ORIGIN` Worker service. In the normal
+deployment mode, `origin_service_name` must refer to that existing service.
+The explicitly opted-in Kurocyber staging mode instead creates a private,
+Terraform-managed static origin and binds the Moqesh Worker to it.
+
+### Isolated Kurocyber staging runner
+
+The staging topology is:
+
+| Host/resource | Role |
+|---|---|
+| `staging.kurocyber.com` | Public, whole-host Moqesh staging route; ordinary uncontained traffic is forwarded to the static game origin. |
+| `admin-staging.kurocyber.com` | Separate admin hostname protected by Cloudflare Access; it reaches the Moqesh dashboard/API, not the game origin. |
+| Static-origin Worker | Serves the original static runner game only for `staging.kurocyber.com`, through the Moqesh `ORIGIN` service binding. Its hostname guard rejects `workers.dev` and unknown hosts. |
+| `kurocyber-website`, `kurocyber.com`, `www.kurocyber.com` | Production Worker/custom domains stay unchanged. The existing `*.kurocyber.com/*` route also stays unchanged. |
+
+Use `terraform/examples/kurocyber-staging.tfvars.example` as the starting
+point, not `basic.tfvars.example`. Its isolated names are
+`moqesh-kurocyber-staging` for the Moqesh Worker and
+`moqesh-kurocyber-staging-events` for D1. It sets
+`create_staging_origin = true` and leaves `origin_service_name` empty; Terraform
+derives the static-origin Worker name as
+`moqesh-staging-origin-<16 lowercase hex characters>`. The suffix is the first
+16 hex characters of SHA-256 over
+`lower(account_id) + ":" + installation_id`, so the name is 38 characters
+long. `installation_id` must be stable, unique, non-secret, and 8–128
+characters. Do not reuse the production Worker, D1 database, Durable Object
+namespace, secrets, or state/workspace for staging.
+
+Terraform does not manage DNS. Before **any** plan/apply, verify the current
+account has proxied records for both exact hostnames; do not assume records
+exist based on an earlier inspection. Terraform's data-source preflight
+requires those records and stops if they are absent or unproxied. If records
+must be created, propose the exact records below and obtain explicit approval
+for the DNS change separately from approval of each Terraform plan:
+
+| Type | Name | Target | Proxy |
+|---|---|---|---|
+| CNAME | `staging` (`staging.kurocyber.com`) | `kurocyber.com` | Proxied (orange cloud) |
+| CNAME | `admin-staging` (`admin-staging.kurocyber.com`) | `kurocyber.com` | Proxied (orange cloud) |
+
+Do not alter, replace, or delete the existing wildcard DNS record or route.
+While the exact staging route is enabled, it takes precedence for
+`staging.kurocyber.com`. If that route is later disabled or removed, the
+unchanged `*.kurocyber.com/*` route becomes applicable again; do not assume
+requests then reach the private static origin or describe that as origin
+recovery. Verify and document the actual fallback before any route rollback.
+
+Use one access-controlled HCP Terraform workspace and remote state per
+Cloudflare account plus installation ID. That workspace/state is the **sole
+writer** for the derived static-origin Worker name; do not manage the same
+account/installation identity from another workspace or state. The ownership
+guard is a read-only Workers Scripts API lookup, not a cross-state lock. It
+requires `CLOUDFLARE_API_TOKEN` with Workers Scripts Read in addition to the
+existing apply credentials. It fails closed on API errors, invalid or
+ambiguous responses, or an origin not owned by this installation. Do not run
+the guard or make other real Cloudflare calls before the explicit deployment
+step and approval of the exact plan.
+
+The bootstrap plan uses `enable_public_route = false`: it includes the Moqesh
+staging resources and private static origin, but no public site route, DNS,
+production resources, or wildcard changes. After explicit approval of that
+exact saved plan and apply, verify the Access-protected admin route, D1
+migrations, secret binding names, disabled `workers.dev`/preview URLs, and
+static-origin hostname guard. Only then create a separate exact saved plan
+with `enable_public_route = true` for `staging.kurocyber.com/*`; obtain a new
+explicit approval before applying it. Every plan needs its own approval.
+Production is out of scope and requires separate discovery, state, plan, and
+consent.
 
 ### Prerequisites and local checks
 
 - An active Cloudflare account and zone, with both `protected_hostname` and
   `admin_hostname` already present in DNS and proxied through Cloudflare.
   Terraform reads and verifies these records but never manages them.
-- An existing origin Worker service and environment that can serve the
-  protected hostname's ordinary traffic.
+- When `create_staging_origin = false` (the normal mode), an existing origin
+  Worker service and environment that can serve the protected hostname's
+  ordinary traffic. For the isolated Kurocyber staging runner, use
+  `create_staging_origin = true` and the dedicated tfvars example above
+  instead; Terraform creates the private static origin.
 - A configured Cloudflare Access team domain and the exact operator email
   addresses to allow on the admin hostname.
 - A supported local Node.js/npm toolchain, the official Terraform CLI, and
   access to an HCP Terraform organization/workspace for remote state.
-- A staging hostname/zone with an equivalent origin and Access policy for
-  acceptance tests before enabling the production route.
+- For a normal production deployment, a separate staging hostname/zone with an
+  equivalent origin and Access policy must pass acceptance before planning a
+  production route. The Kurocyber staging runner described above is its own
+  isolated staging deployment and does not authorize or include production.
 
 Build the assets and Worker bundle before running Terraform:
 
@@ -105,7 +212,7 @@ workspace**. Initialize it with the organization's workspace:
 cd cloudflare/terraform
 terraform init \
   -backend-config="organization=YOUR_TERRAFORM_CLOUD_ORG" \
-  -backend-config="workspaces.name=moqesh-cloudflare-staging"
+  -backend-config="workspaces.name=YOUR_ACCOUNT_INSTALLATION_WORKSPACE"
 ```
 
 Configure that workspace for **local execution** so Terraform can read the
@@ -114,6 +221,12 @@ scripts on the approved machine or CI runner. Remote HCP Terraform state remains
 the state/locking source of truth. Do not use a local state file for a customer
 deployment, check in state/plan files, or share state snapshots. Review HCP
 Terraform access, encryption, retention, and audit settings before use.
+For Kurocyber staging, use one access-controlled HCP Terraform workspace and
+state per `(lower(account_id), installation_id)` identity. That workspace/state
+is the sole writer for the derived static-origin Worker name; do not manage
+that same identity from another workspace or state. The ownership guard is
+not a cross-state lock. Choose the workspace name to uniquely identify that
+account and installation; do not reuse the placeholder above.
 The module pins the [Cloudflare Terraform provider](https://registry.terraform.io/providers/cloudflare/cloudflare/5.28.1)
 to v5.28.1 and records its checksums in `terraform/.terraform.lock.hcl`.
 
@@ -125,6 +238,12 @@ write is not needed. Do not use a Global API Key. Supply the token only through
 `CLOUDFLARE_API_TOKEN` in the protected local/CI environment; Terraform reads it
 through the provider, and its local provisioning steps inherit it. Do not put
 the token in Terraform variables, command-line arguments, logs, or tfvars.
+For Kurocyber staging, the origin-ownership preflight itself only performs a
+read-only Workers Scripts API lookup and requires Workers Scripts Read. The
+surrounding Terraform apply still requires the existing narrowly scoped apply
+credentials. The guard fails closed on API errors or ambiguous ownership
+evidence; do not invoke it or make other real Cloudflare calls before the
+explicit deployment step.
 
 Copy `terraform/examples/basic.tfvars.example` to an ignored
 `terraform/terraform.tfvars` and replace every `REPLACE_...` placeholder with
@@ -162,16 +281,43 @@ Run Terraform from `cloudflare/terraform`. Review all changes in the generated
 plan; Cloudflare MCP is for **read-only discovery and post-change verification**
 only. MCP is not Terraform's state, refresh, dependency, or plan engine.
 
-First apply with `enable_public_route = false` (the default). This stage provisions the Worker, assets, D1, Durable Object
-namespace/migration, scheduled trigger, Access application/policy, secret
-bindings, and migrations, and only then adds the Access-protected admin route. The migration provisioner applies every checked-in
-SQL migration to the Terraform-created D1 database, records successful
-migrations in D1, verifies migrations `0001`, `0002`, and `0003`, and initializes
-runtime defaults without overwriting dashboard settings on later applies.
-Migration failure stops the apply before any route is attached.
+Use three distinct route stages. Staging and production must have separate
+hostnames and customer-owned Terraform state/workspaces, tfvars, credentials,
+and secrets.
 
-Use this two-step plan review flow (save plan files only in the ignored
-Terraform directory):
+1. **Staging bootstrap:** Set `enable_public_route = false` (the default).
+   For Kurocyber, first verify both staging DNS records are present and
+   proxied; any DNS creation requires separate explicit approval before
+   planning. With `create_staging_origin = true`, the complete saved plan
+   includes the Moqesh resources and private static-origin Worker/assets,
+   along with D1, Durable Object namespace/migration, scheduled trigger,
+   secrets, Access application/policy, and the Access-protected admin route.
+   It contains no DNS, public staging site route, production resource, or
+   wildcard change. Review and obtain explicit approval of that exact plan
+   before applying. The protected staging site hostname does not invoke
+   Moqesh during bootstrap. The migration provisioner applies all checked-in
+   SQL migrations to Terraform's D1 database, records successful migrations,
+   verifies `0001`, `0002`, and `0003`, and initializes runtime defaults
+   without overwriting dashboard settings later. Migration failure halts
+   before either route is attached.
+2. **Staging acceptance route:** After bootstrap, verify the admin Access
+   route/policy, D1 migrations, secret binding names, disabled `workers.dev`
+   and preview URLs, and static-origin hostname guard. Then repeat read-only
+   route discovery, set `enable_public_route = true` only for the dedicated
+   staging hostname, create and show a new complete saved plan, and get
+   separate explicit approval before applying it. This whole-host route is
+   necessary to test the live Worker request path; ordinary uncontained
+   requests still pass through `ORIGIN` to the static origin without event
+   logging. Production and the wildcard route remain untouched.
+3. **Production route:** Only after staging acceptance is documented and
+   reviewed, perform fresh production discovery, prepare production-specific
+   state/configuration, then create and show a separate production plan with
+   `enable_public_route = true`. Explain the whole-host impact and wait for
+   explicit approval of that exact plan before applying it. Staging approval
+   does not authorize production.
+
+For each route stage, use this saved-plan review flow (save plan files only in
+the ignored Terraform directory):
 
 ```sh
 terraform plan -var-file=terraform.tfvars -out=staging.tfplan
@@ -185,19 +331,16 @@ the saved plan:
 terraform apply staging.tfplan
 ```
 
-Do not use `-auto-approve`. Run the same staged workflow in a staging zone and
-enable its public route only after verifying ordinary origin pass-through,
-both lure paths, dashboard Access, secret/D1 readiness, and teardown ownership.
-For production, first keep the public route disabled, inspect MCP discovery for
-route conflicts again, then set `enable_public_route = true`, create and show a
-new saved plan, and wait for a separate explicit approval before applying it.
-Terraform attaches the whole-host route as `protected-hostname/*` only after
-the Worker, bindings, schema, secret names, Access application/policy, and admin
-route are ready. Access protects the admin hostname only, never the public
-hostname. `workers.dev` and Worker preview URLs are explicitly disabled.
-After the stage-one apply, confirm `terraform output d1_migrations_verified`
-and `terraform output worker_secret_bindings_verified` are both `true` before
-planning the staging or production public route.
+Do not use `-auto-approve`. Terraform attaches the whole-host route as
+`protected-hostname/*` only after the Worker, bindings, schema, secret names,
+Access application/policy, and admin route are ready. Access protects the
+admin hostname only, never the public hostname. `workers.dev` and Worker
+preview URLs are explicitly disabled. After each bootstrap apply, confirm
+`terraform output d1_migrations_verified` and
+`terraform output worker_secret_bindings_verified` are both `true` before
+planning that stage's public route. Keep the staging route attached only for
+the approved acceptance window; route removal requires its own reviewed,
+approved plan.
 
 The staged migrations run through the Terraform apply's local D1 API helper,
 with the real database ID supplied by Terraform. Do not run Wrangler's local
@@ -214,14 +357,20 @@ against the customer database.
   subsequently change runtime settings; Terraform does not overwrite existing
   dashboard settings on routine applies.
 - For rollback, first plan and approve removal of the public route by setting
-  `enable_public_route = false`. Verify origin traffic is restored, then plan
-  and approve a Worker code/assets rollback. Preserve D1 and its data unless a
-  separately reviewed retention/backup decision authorizes removal.
+  `enable_public_route = false`. For Kurocyber staging, account for the
+  unchanged wildcard route becoming applicable again and verify the actual
+  fallback; disabling the exact route does not restore the private static
+  origin. Then plan and approve a Worker code/assets rollback. Preserve D1 and
+  its data unless a separately reviewed retention/backup decision authorizes
+  removal.
 - For uninstall, inspect a saved Terraform plan and confirm it removes only
   this deployment's two Worker routes, Access application, Worker/subdomain,
   D1 database, and associated managed resources. Back up any required D1 data.
-  Do not remove customer DNS records or the existing origin service; Terraform
-  does not own them. Obtain explicit approval before applying any destroy plan.
+  Do not remove customer DNS records or an external existing origin service;
+  Terraform does not own them. For Kurocyber staging, the private static origin
+  is Terraform-managed and may be removed only as part of the reviewed plan for
+  this installation. Obtain explicit approval before applying any destroy
+  plan.
 
 Formatting and credential-free provider validation:
 
