@@ -22,28 +22,10 @@ locals {
   target_hostnames = [var.protected_hostname, var.admin_hostname]
   existing_routes = [
     for route in data.cloudflare_workers_routes.existing.result : {
-      pattern  = route.pattern
-      hostname = lower(split("/", route.pattern)[0])
-      script   = route.script
+      pattern = route.pattern
+      script  = route.script
     }
   ]
-  overlapping_routes = flatten([
-    for hostname in local.target_hostnames : [
-      for route in local.existing_routes : "${route.pattern} (${route.script})"
-      if route.script != var.worker_name && (
-        route.hostname == hostname
-        || route.hostname == "*"
-        || route.hostname == "*${hostname}"
-        || (
-          startswith(route.hostname, "*.")
-          && (
-            hostname == trimprefix(route.hostname, "*.")
-            || endswith(hostname, ".${trimprefix(route.hostname, "*.")}")
-          )
-        )
-      )
-    ]
-  ])
   migration_files = sort(fileset("${path.module}/../migrations", "*.sql"))
   migration_digest = sha256(jsonencode([
     for filename in local.migration_files : {
@@ -51,6 +33,13 @@ locals {
       digest = filesha256("${path.module}/../migrations/${filename}")
     }
   ]))
+}
+
+module "route_preflight" {
+  source           = "./modules/route-preflight"
+  target_hostnames = local.target_hostnames
+  worker_name      = var.worker_name
+  existing_routes  = local.existing_routes
 }
 
 resource "terraform_data" "deployment_preflight" {
@@ -91,8 +80,8 @@ resource "terraform_data" "deployment_preflight" {
     }
 
     precondition {
-      condition     = length(local.overlapping_routes) == 0
-      error_message = "Existing Worker routes overlap a requested hostname: ${join(", ", local.overlapping_routes)}. Stop and resolve ownership/conflicts before continuing."
+      condition     = length(module.route_preflight.overlapping_routes) == 0
+      error_message = "Existing Worker routes overlap a requested hostname: ${join(", ", module.route_preflight.overlapping_routes)}. Stop and resolve ownership/conflicts before continuing."
     }
   }
 }
@@ -337,7 +326,7 @@ resource "cloudflare_workers_route" "admin" {
 
   lifecycle {
     precondition {
-      condition     = length(local.overlapping_routes) == 0
+      condition     = length(module.route_preflight.overlapping_routes) == 0
       error_message = "An existing route overlaps the admin hostname. Do not replace or reassign it."
     }
   }
@@ -366,7 +355,7 @@ resource "cloudflare_workers_route" "public" {
     }
 
     precondition {
-      condition     = length(local.overlapping_routes) == 0
+      condition     = length(module.route_preflight.overlapping_routes) == 0
       error_message = "An existing route overlaps the protected hostname. Do not replace or reassign it."
     }
   }
