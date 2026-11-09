@@ -42,7 +42,7 @@
 | Bootstrap plan (`enable_public_route = false`) reviewed | Moqesh resources plus private static-origin Worker/assets; no public site route, DNS, production, or wildcard changes | NOT RUN |
 | Bootstrap exact saved plan explicitly approved and applied | Approval is for the reviewed plan; no `-auto-approve` | NOT RUN |
 | D1 migrations/runtime settings verified | Migrations `0001`, `0002`, `0003`; outputs `d1_migrations_verified=true` | NOT RUN |
-| Worker secret binding names verified | `LURE_KEY_SECRET`, `ALERT_WEBHOOK_URL`; values not recorded | NOT RUN |
+| Required Worker secret binding names verified | `LURE_KEY_SECRET`; `ALERT_WEBHOOK_URL` is not required or verified when delivery is disabled (a previously provisioned secret is retained but unused); values not recorded | NOT RUN |
 | Access admin route verified | Exact staging admin hostname and approved operator policy | NOT RUN |
 | Static-origin hostname guard verified | Only `staging.kurocyber.com`; rejects `workers.dev` and unknown hosts | NOT RUN |
 | Staging route plan reviewed | Only `staging.kurocyber.com/*` enables whole-host routing | NOT RUN |
@@ -83,6 +83,7 @@ that a particular setting was deployed.
 | Event/audit retention | NOT RUN |
 | Allowlist | NOT RUN |
 | Direct-lure alert binding | Expected: `false` in current Terraform; observed staging value: NOT RUN |
+| Alert webhook enabled | Expected: `false` for isolated Kurocyber staging; observed staging value: NOT RUN |
 
 For elapsed-time tests, use explicit staging-only durations within supported
 bounds and record them. The minimum maze duration is 1 minute and the minimum
@@ -96,15 +97,16 @@ block duration is 1 hour. A shortened staging run does not prove the
 | Ordinary uncontained request | Expected static-origin response and HTTP status; reaches origin through Moqesh; no event created | Staging | NOT RUN |
 | Configured `/.env` | Decoy at the same URL with synthetic key and configured bait API URL; origin not called | Staging | NOT RUN |
 | Invalid/missing bait API key | Unauthorized decoy; no confirmation or containment | Staging | NOT RUN |
-| Valid synthetic key from a different source | Confirmation persists; key is not stored; eligible alert dispatches | Staging | NOT RUN |
+| Valid synthetic key from a different source | Confirmation persists, key is not stored, and containment starts; no webhook delivery in staging | Staging | NOT RUN |
 | Allowlisted ordinary source | Bypasses maze/block and reaches origin | Staging | NOT RUN |
 | Allowlisted direct lure | Event recorded; no direct-lure webhook alert with current `ALERT_DIRECT_LURE=false`; no containment | Staging | NOT RUN |
+| Allowlisted confirmed-key reuse with webhook disabled | Confirmation event is recorded; no webhook outbox entry or outbound request; allowlist still bypasses containment | Staging | NOT RUN |
 | Confirmed source during maze | Decoys on non-lure paths; origin not called; initial timer is not extended | Staging | NOT RUN |
 | Response budget | Throttles with bounded response; does not shorten maze or start block early | Staging | NOT RUN |
 | Maze expiry and block | Maze ends at configured time; block lasts configured duration | Staging, use recorded durations | NOT RUN |
 | Block expiry | Normal handling resumes after configured block expiry | Staging, use recorded durations | NOT RUN |
 | Manual unblock | Authorized operator clears source state; audit identifies actor/time/result | Staging | NOT RUN |
-| Webhook grouping/retry | First eligible alert is immediate; grouping, retries and idempotency behave as designed | Staging | NOT RUN |
+| Webhook grouping/retry | Existing alert-enabled behavior is covered by local tests; skipped in Kurocyber staging while `alert_webhook_enabled=false` | Local tests; staging skipped | NOT RUN |
 | Admin Access, anonymous | Anonymous request to `admin-staging.kurocyber.com` is denied before dashboard/API access | Staging | NOT RUN |
 | Admin Access, unauthorized | Authenticated but unapproved identity is denied | Staging | NOT RUN |
 | Admin Access, authorized | Approved operator identity can use the staging dashboard/API | Staging | NOT RUN |

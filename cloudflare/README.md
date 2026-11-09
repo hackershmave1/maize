@@ -60,13 +60,19 @@ Runtime bounds are: maze 1–120 minutes, block 1–168 hours, response budget
 
 The Worker expects Terraform to configure `ADMIN_HOSTNAME`, `ADMIN_ROUTE`,
 `PUBLIC_SITE_HOSTNAME`, `PUBLIC_ROUTE`, `ACCESS_TEAM_DOMAIN`, and `ACCESS_AUD`.
-Keep `LURE_KEY_SECRET` and `ALERT_WEBHOOK_URL` in Cloudflare's secret store;
-the dashboard never returns either value.
+Keep `LURE_KEY_SECRET` and, when enabled, `ALERT_WEBHOOK_URL` in Cloudflare's
+secret store; the dashboard never returns either value. `ALERT_WEBHOOK_URL` is
+required only when `alert_webhook_enabled = true`.
 Terraform currently sets `ALERT_DIRECT_LURE = false`, so an allowlisted
 direct-lure request is recorded but does not send its own webhook alert or
-start containment. Confirmed-key alerts remain enabled. Do not expect
-direct-lure webhook alerts in staging unless a separately reviewed change
-makes that binding configurable.
+start containment. Confirmed-key webhook alerts are controlled by
+`alert_webhook_enabled`, which defaults to true. The isolated Kurocyber staging
+example sets it to false: lure and containment events remain recorded in D1
+and visible in the dashboard, but no webhook outbox jobs are created or
+delivered. This is not a secret-revocation operation: if a webhook secret was
+previously provisioned, it remains stored but is unused while delivery is
+disabled. Any unexpired outbox entries already present are retained and may be
+retried if delivery is enabled again.
 
 From this directory:
 
@@ -259,12 +265,16 @@ run the approved `terraform apply`:
 - `MOQESH_LURE_KEY_SECRET`: a unique, random, per-installation value of at
   least 32 bytes (for example, generate one with a customer-approved secret
   manager).
-- `MOQESH_ALERT_WEBHOOK_URL`: the HTTPS webhook destination.
+- `MOQESH_ALERT_WEBHOOK_URL`: the HTTPS webhook destination; required only
+  when `alert_webhook_enabled = true`.
 - `CLOUDFLARE_API_TOKEN`: the narrowly scoped API token described above.
 
-The Terraform apply invokes a checked-in helper that uploads the two Worker
-secrets using Cloudflare's [bulk Worker secrets API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/)
-and verifies their binding names. D1 migrations use the official
+The Terraform apply invokes a checked-in helper that uploads and verifies the
+Worker secret bindings required by the selected configuration using
+Cloudflare's [bulk Worker secrets API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/secrets/methods/bulk_update/).
+With alerts disabled, only `LURE_KEY_SECRET` is uploaded and verified; with
+alerts enabled, both `LURE_KEY_SECRET` and `ALERT_WEBHOOK_URL` are required.
+D1 migrations use the official
 [D1 query API](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/query/)
 with a batch that records migration completion.
 The secret values are read from the process environment, never passed as
