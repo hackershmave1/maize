@@ -34,6 +34,8 @@ function createEnv(
   options: {
     allowlisted?: string;
     eventsDb?: Env["EVENTS_DB"];
+    alertConfirmation?: string;
+    alertWebhookEnabled?: string;
     stateUnavailable?: boolean;
     responseBudget?: string;
   } = {},
@@ -59,10 +61,63 @@ function createEnv(
     LURE_KEY_SECRET: lureSecret,
     BAIT_API_PATH: baitApiPath,
     ALLOWLISTED_SOURCES: options.allowlisted,
+    ALERT_CONFIRMATION: options.alertConfirmation,
+    ALERT_WEBHOOK_ENABLED: options.alertWebhookEnabled,
     EVENTS_DB: options.eventsDb,
     MAZE_RESPONSE_BUDGET: options.responseBudget ?? "2",
   } as unknown as Env;
   return { env, origin, namespace, session, sessionIdNames };
+}
+
+function createEventsDatabase() {
+  const statements: { sql: string; params: unknown[] }[] = [];
+  const batches: { sql: string; params: unknown[] }[][] = [];
+  const database = {
+    prepare: vi.fn((sql: string) => {
+      let params: unknown[] = [];
+      return {
+        bind: vi.fn((...values: unknown[]) => {
+          params = values;
+          return {
+            sql,
+            params,
+            first: vi.fn(async () => sql.includes("SELECT lures_enabled")
+              ? {
+                  lures_enabled: 1,
+                  maze_duration_minutes: 15,
+                  block_duration_hours: 24,
+                  response_budget: 2,
+                  alert_grouping_minutes: 5,
+                  retention_days: 30,
+                }
+              : null),
+            all: vi.fn(async () => ({ results: [] })),
+            run: vi.fn(async () => {
+              statements.push({ sql, params });
+              return { meta: { changes: 1 } };
+            }),
+          };
+        }),
+      };
+    }),
+    batch: vi.fn(async (batch: { sql?: string; params?: unknown[] }[]) => {
+      batches.push(batch.map((statement) => ({
+        sql: statement.sql ?? "",
+        params: statement.params ?? [],
+      })));
+      return batch.map((_, index) => ({
+        results: index === batch.length - 1
+          ? [{ id: "pending-outbox", dispatch_immediately: 1 }]
+          : [],
+        meta: { changes: 0 },
+      }));
+    }),
+  };
+  return {
+    database: database as unknown as Env["EVENTS_DB"],
+    statements,
+    batches,
+  };
 }
 
 it("passes ordinary requests to the origin unchanged", async () => {
@@ -83,6 +138,100 @@ it("handles the .env lure without sending it to the origin", async () => {
   expect(response.status).toBe(200);
   expect(await response.text()).toMatch(/^API_KEY=[a-f0-9]{64}$/m);
   expect(origin.fetch).not.toHaveBeenCalled();
+});
+
+it("records confirmed lure events without queuing webhooks when delivery is disabled", async () => {
+  const session = createSession();
+  const { database, statements, batches } = createEventsDatabase();
+  const { env } = createEnv(session, {
+    allowlisted: sourceIp,
+    alertConfirmation: "true",
+    alertWebhookEnabled: "false",
+    eventsDb: database,
+  });
+  const lureResponse = await worker.fetch(
+    new Request("https://site.test/.env", {
+      headers: { "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+  const key = (await lureResponse.text()).match(/^API_KEY=(.+)$/m)?.[1];
+  if (!key) throw new Error("The .env lure did not include its synthetic key");
+
+  await worker.fetch(
+    new Request(`https://site.test${baitApiPath}`, {
+      headers: {
+        Authorization: "Bearer " + key,
+        "CF-Connecting-IP": sourceIp,
+      },
+    }),
+    env,
+  );
+
+  const confirmedEvents = [...statements, ...batches.flat()].filter(({ sql, params }) =>
+    sql.includes("INSERT INTO events") && params[2] === "confirmed_reuse");
+  expect(session.confirmKeyReuse).not.toHaveBeenCalled();
+  expect(confirmedEvents).toHaveLength(1);
+  expect(batches).toEqual([]);
+});
+
+it("keeps containment and event persistence active when alerts are disabled", async () => {
+  const session = createSession();
+  const { database, statements } = createEventsDatabase();
+  const { env } = createEnv(session, {
+    alertConfirmation: "true",
+    alertWebhookEnabled: "false",
+    eventsDb: database,
+  });
+  const lureResponse = await worker.fetch(
+    new Request("https://site.test/.env", {
+      headers: { "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+  const key = (await lureResponse.text()).match(/^API_KEY=(.+)$/m)?.[1];
+  if (!key) throw new Error("The .env lure did not include its synthetic key");
+
+  await worker.fetch(
+    new Request(`https://site.test${baitApiPath}`, {
+      headers: {
+        Authorization: "Bearer " + key,
+        "CF-Connecting-IP": sourceIp,
+      },
+    }),
+    env,
+  );
+
+  const confirmedEvents = statements.filter(({ sql, params }) =>
+    sql.includes("INSERT INTO events") && params[2] === "confirmed_reuse");
+  expect(session.confirmKeyReuse).toHaveBeenCalledOnce();
+  expect(confirmedEvents).toHaveLength(1);
+  expect(statements.some(({ sql }) => sql.includes("INSERT INTO containment_sources"))).toBe(true);
+});
+
+it("keeps retention cleanup but skips webhook delivery during scheduled work when disabled", async () => {
+  const { database, statements, batches } = createEventsDatabase();
+  const { env } = createEnv(createSession(), {
+    alertWebhookEnabled: "false",
+    eventsDb: database,
+  });
+  const pending: Promise<unknown>[] = [];
+  await worker.scheduled(
+    { scheduledTime: Date.now(), cron: "* * * * *" },
+    env,
+    { waitUntil: (promise) => pending.push(promise) },
+  );
+  await Promise.all(pending);
+
+  const cleanupSql = [
+    ...statements.map(({ sql }) => sql),
+    ...batches.flat().map(({ sql }) => sql),
+  ];
+  expect(cleanupSql.some((sql) => sql.includes("DELETE FROM events"))).toBe(true);
+  expect(cleanupSql.some((sql) => sql.includes("DELETE FROM admin_audit"))).toBe(true);
+  expect(cleanupSql.some((sql) => sql.includes("DELETE FROM containment_sources"))).toBe(true);
+  expect(cleanupSql.some((sql) => sql.includes("DELETE FROM webhook_outbox"))).toBe(true);
+  expect(cleanupSql.some((sql) => /UPDATE webhook_outbox\s+SET status/.test(sql))).toBe(false);
 });
 
 it("uses only CF-Connecting-IP and never trusts X-Forwarded-For", async () => {

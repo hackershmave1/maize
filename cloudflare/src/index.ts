@@ -61,6 +61,7 @@ export interface Env {
   ALLOWLISTED_SOURCES?: string;
   ALERT_DIRECT_LURE?: string;
   ALERT_CONFIRMATION?: string;
+  ALERT_WEBHOOK_ENABLED?: string;
   EVENTS_DB?: EventDatabase;
   ALERT_WEBHOOK_URL?: string;
   ADMIN_HOSTNAME?: string;
@@ -227,9 +228,11 @@ export default {
       deleteExpiredOutbox(database, Date.now(), retentionMs).catch(() => {
         console.error("D1 webhook outbox retention cleanup failed");
       }),
-      processPendingAlerts(database, env.ALERT_WEBHOOK_URL).catch(() => {
-        console.error("D1 webhook retry processing failed");
-      }),
+      ...(env.ALERT_WEBHOOK_ENABLED === "false"
+        ? []
+        : [processPendingAlerts(database, env.ALERT_WEBHOOK_URL).catch(() => {
+            console.error("D1 webhook retry processing failed");
+          })]),
     ]).then(() => undefined));
   },
 };
@@ -430,6 +433,10 @@ async function persistLureResult(
     confirmed: result.event.confirmed,
   };
   if (!result.alert) {
+    await persistEvent(event, env);
+    return;
+  }
+  if (env.ALERT_WEBHOOK_ENABLED === "false") {
     await persistEvent(event, env);
     return;
   }
