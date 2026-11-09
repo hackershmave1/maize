@@ -25,18 +25,14 @@ data "cloudflare_workers_scripts" "staging_origin_candidates" {
 }
 
 data "cloudflare_workers_script" "existing_staging_origin" {
-  count       = var.create_staging_origin && length(local.staging_origin_collision_names) > 0 ? 1 : 0
+  count       = module.staging_origin_ownership.read_existing_script ? 1 : 0
   account_id  = var.account_id
   script_name = var.staging_origin_worker_name
 }
 
 locals {
-  staging_origin_owner_marker = "moqesh-staging-origin-owner:${sha256(var.installation_id)}"
-  staging_origin_collision_names = var.create_staging_origin ? [
-    for script in data.cloudflare_workers_scripts.staging_origin_candidates[0].result : script.id
-    if script.id == var.staging_origin_worker_name
-  ] : []
-  target_hostnames = [var.protected_hostname, var.admin_hostname]
+  staging_origin_owner_marker = module.staging_origin_ownership.owner_marker
+  target_hostnames            = [var.protected_hostname, var.admin_hostname]
   existing_routes = [
     for route in data.cloudflare_workers_routes.existing.result : {
       pattern = route.pattern
@@ -50,6 +46,19 @@ locals {
       digest = filesha256("${path.module}/../migrations/${filename}")
     }
   ]))
+}
+
+module "staging_origin_ownership" {
+  source          = "./modules/staging-origin-ownership"
+  enabled         = var.create_staging_origin
+  installation_id = var.installation_id
+  worker_name     = var.staging_origin_worker_name
+  existing_script_names = var.create_staging_origin ? [
+    for script in data.cloudflare_workers_scripts.staging_origin_candidates[0].result : script.id
+  ] : []
+  existing_sources = [
+    for script in data.cloudflare_workers_script.existing_staging_origin : script.script
+  ]
 }
 
 module "route_preflight" {
@@ -72,13 +81,7 @@ resource "terraform_data" "deployment_preflight" {
     }
 
     precondition {
-      condition = !var.create_staging_origin || (
-        length(trimspace(var.installation_id)) > 0 && length(local.staging_origin_owner_marker) > 0 &&
-        alltrue([
-          for script in data.cloudflare_workers_script.existing_staging_origin :
-          strcontains(coalesce(script.script, " "), "// ${local.staging_origin_owner_marker}\n")
-        ])
-      )
+      condition     = module.staging_origin_ownership.safe
       error_message = "An existing staging origin Worker lacks this installation's ownership marker; refusing to overwrite an unmanaged or differently owned Worker."
     }
 
