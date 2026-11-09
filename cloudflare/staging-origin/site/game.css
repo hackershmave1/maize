@@ -1,0 +1,159 @@
+:root {
+  color-scheme: dark;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  background: #081421;
+  color: #eff8ff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(31 82 110 / 35%), transparent 48rem),
+    #081421;
+}
+
+.game-shell {
+  width: min(100% - 2rem, 940px);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 9vh, 6rem) 0 3rem;
+}
+
+header {
+  max-width: 42rem;
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.6rem;
+  color: #8de5e5;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: #f4fbff;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.instructions {
+  margin: 1rem 0 0;
+  color: #c3d6e5;
+  font-size: clamp(1rem, 2.4vw, 1.15rem);
+  line-height: 1.6;
+}
+
+.game-panel {
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid #31546b;
+  border-radius: 1.25rem;
+  background: linear-gradient(145deg, rgb(20 39 57 / 96%), rgb(11 27 42 / 98%));
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 28%);
+}
+
+.score-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: clamp(1.5rem, 7vw, 4rem);
+  margin: 0 0 0.9rem;
+  color: #c3d6e5;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-row p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.score-row output {
+  display: inline-block;
+  min-width: 2.5ch;
+  margin-left: 0.35rem;
+  color: #fff;
+  font-weight: 800;
+  text-align: right;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  border: 1px solid #52758b;
+  border-radius: 0.75rem;
+  background: #07111d;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#game:focus-visible,
+button:focus-visible {
+  outline: 3px solid #ffe08a;
+  outline-offset: 4px;
+}
+
+#status {
+  min-height: 1.5em;
+  margin: 1.25rem 0 1rem;
+  color: #d6e8f4;
+  line-height: 1.5;
+}
+
+button {
+  min-height: 2.9rem;
+  padding: 0.7rem 1.25rem;
+  border: 1px solid #a8f3ed;
+  border-radius: 0.65rem;
+  background: #a8f3ed;
+  color: #08202a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+button:hover {
+  background: #d0fffa;
+}
+
+button:active {
+  background: #83dcd8;
+}
+
+@media (max-width: 520px) {
+  .game-shell {
+    width: min(100% - 1.25rem, 940px);
+    padding-top: 2rem;
+  }
+
+  .game-panel {
+    padding: 0.8rem;
+    border-radius: 0.9rem;
+  }
+
+  #status {
+    font-size: 0.95rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

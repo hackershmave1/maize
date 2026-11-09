@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#081421">
+    <title>Signal Sprint — Offline Runner</title>
+    <link rel="stylesheet" href="./game.css">
+    <script type="module" src="./game.js"></script>
+  </head>
+  <body>
+    <main class="game-shell">
+      <header>
+        <p class="eyebrow">A tiny offline runner</p>
+        <h1>Signal Sprint</h1>
+        <p class="instructions">Jump the signal debris. Press Space, Arrow Up, or tap the field.</p>
+      </header>
+      <section class="game-panel" aria-label="Signal Sprint game">
+        <div class="score-row">
+          <p>Score <output id="score">0</output></p>
+          <p>Best <output id="best-score">0</output></p>
+        </div>
+        <canvas id="game" width="800" height="280" aria-label="Explorer robot runner game" tabindex="0"></canvas>
+        <p id="status" role="status" aria-live="polite">Press Start to run.</p>
+        <button id="restart" type="button">Start game</button>
+      </section>
+    </main>
+  </body>
+</html>
