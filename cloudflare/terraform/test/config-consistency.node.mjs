@@ -142,29 +142,28 @@ nodeTest("binding checker enforces the pinned provider staging assets schema", a
   assert.ok(nestedErrors.some((error) => /5\.28\.1.*assets\.config\.binding/.test(error)));
 });
 
-nodeTest("staging origin ownership is checked from existing source before any managed upload", async () => {
+nodeTest("read-only staging ownership check gates uploads on every apply without the broken provider source read", async () => {
   const main = await terraformFile("main.tf");
-  const scripts = main.match(/data "cloudflare_workers_scripts" "staging_origin_candidates" \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  assert.match(scripts, /count\s*=\s*var\.create_staging_origin \? 1 : 0/);
-  assert.match(scripts, /account_id\s*=\s*var\.account_id/);
-  assert.match(scripts, /max_items\s*=\s*1000/);
-  assert.doesNotMatch(scripts, /\btags\s*=/);
+  assert.doesNotMatch(main, /data "cloudflare_workers_script[s]?"/);
   assert.match(main, /staging_origin_owner_marker\s*=\s*module\.staging_origin_ownership\.owner_marker/);
   const ownership = main.match(/module "staging_origin_ownership" \{([\s\S]*?)\n\}/)?.[1] ?? "";
   assert.match(ownership, /source\s*=\s*"\.\/modules\/staging-origin-ownership"/);
   assert.match(ownership, /enabled\s*=\s*var\.create_staging_origin/);
   assert.match(ownership, /installation_id\s*=\s*var\.installation_id/);
   assert.match(ownership, /account_id\s*=\s*var\.account_id/);
-  assert.match(ownership, /existing_script_names\s*=\s*var\.create_staging_origin \? \[\s*for script in data\.cloudflare_workers_scripts\.staging_origin_candidates\[0\]\.result : script\.id\s*\] : \[\]/);
-  assert.match(ownership, /existing_sources\s*=\s*\[\s*for script in data\.cloudflare_workers_script\.existing_staging_origin : script\.script\s*\]/);
-  const existing = main.match(/data "cloudflare_workers_script" "existing_staging_origin" \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  assert.match(existing, /count\s*=\s*module\.staging_origin_ownership\.read_existing_script \? 1 : 0/);
-  assert.match(existing, /account_id\s*=\s*var\.account_id/);
-  assert.match(existing, /script_name\s*=\s*local\.staging_origin_worker_name/);
+  const guard = resourceBody(main, "terraform_data", "staging_origin_ownership");
+  assert.match(guard, /count\s*=\s*var\.create_staging_origin \? 1 : 0/);
+  assert.match(guard, /triggers_replace\s*=\s*\[timestamp\(\)\]/);
+  assert.match(guard, /create_before_destroy\s*=\s*true/);
+  assert.match(guard, /provisioner "local-exec"/);
+  assert.match(guard, /command\s*=\s*"node \\".*scripts\/check-staging-origin-ownership\.mjs/);
+  assert.match(guard, /MOQESH_ACCOUNT_ID\s*=\s*var\.account_id/);
+  assert.match(guard, /MOQESH_WORKER_NAME\s*=\s*local\.staging_origin_worker_name/);
+  assert.match(guard, /MOQESH_OWNER_MARKER\s*=\s*local\.staging_origin_owner_marker/);
+  assert.doesNotMatch(guard, /on_failure\s*=\s*continue|CLOUDFLARE_API_TOKEN\s*=/);
   const preflight = resourceBody(main, "terraform_data", "deployment_preflight");
-  assert.match(preflight, /condition\s*=\s*var\.create_staging_origin \? length\(data\.cloudflare_workers_scripts\.staging_origin_candidates\[0\]\.result\) < 1000 : true/);
+  assert.match(preflight, /depends_on\s*=\s*\[terraform_data\.staging_origin_ownership\]/);
   assert.match(preflight, /condition\s*=\s*module\.staging_origin_ownership\.safe/);
-  assert.match(preflight, /error_message\s*=\s*"[^"]*refusing to overwrite[^"]*"/);
   assert.match(resourceBody(main, "cloudflare_workers_script", "staging_origin"), /depends_on\s*=\s*\[terraform_data\.deployment_preflight\]/);
 });
 

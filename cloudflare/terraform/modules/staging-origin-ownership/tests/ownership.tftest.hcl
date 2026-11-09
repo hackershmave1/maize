@@ -1,9 +1,7 @@
 variables {
-  enabled               = true
-  installation_id       = "test-installation"
-  account_id            = "11111111111111111111111111111111"
-  existing_script_names = []
-  existing_sources      = []
+  enabled         = true
+  installation_id = "test-installation"
+  account_id      = "11111111111111111111111111111111"
 }
 
 run "stable_installation_name" {
@@ -55,105 +53,31 @@ run "different_account_name_is_isolated" {
   }
 }
 
-run "disabled_skips_collision_read" {
+run "disabled_needs_no_installation_identity" {
   command = plan
 
   variables {
-    enabled               = false
-    existing_script_names = [run.stable_installation_name.worker_name]
-    existing_sources      = ["export default {};"]
+    enabled         = false
+    installation_id = ""
   }
 
   assert {
-    condition     = output.safe && !output.read_existing_script
-    error_message = "Disabled staging must be safe and must not request a collision source read."
+    condition     = output.safe
+    error_message = "Disabled staging must not require an installation identity."
   }
 }
 
-run "first_creation_ignores_other_names" {
+run "owner_marker_matches_uploaded_source" {
   command = plan
 
-  variables {
-    existing_script_names = ["production-origin", "moqesh-staging-origin-other"]
-  }
-
   assert {
-    condition     = output.safe && !output.read_existing_script
-    error_message = "Without an exact-name collision, first creation must be safe without a source read."
-  }
-}
-
-run "unowned_collision_blocks_upload" {
-  command = plan
-
-  variables {
-    existing_script_names = [run.stable_installation_name.worker_name]
-    existing_sources      = ["export default {};"]
-  }
-
-  assert {
-    condition     = !output.safe && output.read_existing_script
-    error_message = "An exact-name script without the ownership marker must block upload."
-  }
-}
-
-run "owned_collision_allows_reuse" {
-  command = plan
-
-  variables {
-    existing_script_names = [run.stable_installation_name.worker_name]
-    existing_sources      = ["// ${run.stable_installation_name.owner_marker}\nexport default {};"]
-  }
-
-  assert {
-    condition     = output.safe && output.read_existing_script
-    error_message = "An exact-name script with this installation's marker must allow reuse."
+    condition     = output.safe
+    error_message = "A nonempty installation identity must be safe to evaluate."
   }
 
   assert {
     condition     = output.owner_marker == "moqesh-staging-origin-owner:${sha256("11111111111111111111111111111111:test-installation")}"
     error_message = "Uploaded source must use the same stable installation marker as the guard."
-  }
-}
-
-run "different_owner_blocks_upload" {
-  command = plan
-
-  variables {
-    existing_script_names = [run.stable_installation_name.worker_name]
-    existing_sources      = ["// ${run.different_installation_name_is_isolated.owner_marker}\nexport default {};"]
-  }
-
-  assert {
-    condition     = !output.safe
-    error_message = "Another installation's marker must not permit overwrite."
-  }
-}
-
-run "missing_collision_source_fails_closed" {
-  command = plan
-
-  variables {
-    existing_script_names = [run.stable_installation_name.worker_name]
-  }
-
-  assert {
-    condition     = !output.safe && output.read_existing_script
-    error_message = "A collision must not pass before its source is read."
-  }
-}
-
-run "null_collision_source_fails_closed" {
-  command = plan
-
-  variables {
-    existing_script_names = [run.stable_installation_name.worker_name]
-    existing_sources      = [null]
-  }
-
-  assert {
-    condition     = !output.safe
-    error_message = "A missing provider source value must fail closed."
   }
 }
 

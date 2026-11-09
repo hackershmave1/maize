@@ -18,18 +18,6 @@ data "cloudflare_workers_routes" "existing" {
   zone_id = var.zone_id
 }
 
-data "cloudflare_workers_scripts" "staging_origin_candidates" {
-  count      = var.create_staging_origin ? 1 : 0
-  account_id = var.account_id
-  max_items  = 1000
-}
-
-data "cloudflare_workers_script" "existing_staging_origin" {
-  count       = module.staging_origin_ownership.read_existing_script ? 1 : 0
-  account_id  = var.account_id
-  script_name = local.staging_origin_worker_name
-}
-
 locals {
   staging_origin_worker_name  = module.staging_origin_ownership.worker_name
   staging_origin_owner_marker = module.staging_origin_ownership.owner_marker
@@ -54,12 +42,29 @@ module "staging_origin_ownership" {
   enabled         = var.create_staging_origin
   installation_id = var.installation_id
   account_id      = var.account_id
-  existing_script_names = var.create_staging_origin ? [
-    for script in data.cloudflare_workers_scripts.staging_origin_candidates[0].result : script.id
-  ] : []
-  existing_sources = [
-    for script in data.cloudflare_workers_script.existing_staging_origin : script.script
-  ]
+}
+
+// Apply-time, read-only guard: run even for saved plans and subsequent route-only applies.
+// One workspace is the sole writer per installation. This check is not a cross-state lock.
+// v5.28.1 workers_script data source JSON-decodes raw/multipart downloads incorrectly.
+resource "terraform_data" "staging_origin_ownership" {
+  count            = var.create_staging_origin ? 1 : 0
+  triggers_replace = [timestamp()]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  // Requires Node with native fetch/FormData and inherited CLOUDFLARE_API_TOKEN
+  // (Workers Scripts Read). The token is never passed through Terraform state.
+  provisioner "local-exec" {
+    command = "node \"${path.module}/scripts/check-staging-origin-ownership.mjs\""
+    environment = {
+      MOQESH_ACCOUNT_ID   = var.account_id
+      MOQESH_WORKER_NAME  = local.staging_origin_worker_name
+      MOQESH_OWNER_MARKER = local.staging_origin_owner_marker
+    }
+  }
 }
 
 module "route_preflight" {
@@ -77,13 +82,8 @@ resource "terraform_data" "deployment_preflight" {
 
   lifecycle {
     precondition {
-      condition     = var.create_staging_origin ? length(data.cloudflare_workers_scripts.staging_origin_candidates[0].result) < 1000 : true
-      error_message = "The Worker script listing reached its safety limit; staging origin ownership cannot be checked exhaustively. Stop before uploading any Worker."
-    }
-
-    precondition {
       condition     = module.staging_origin_ownership.safe
-      error_message = "An existing staging origin Worker lacks this installation's ownership marker; refusing to overwrite an unmanaged or differently owned Worker."
+      error_message = "Enabled staging requires a nonempty installation_id."
     }
 
     precondition {
@@ -121,6 +121,8 @@ resource "terraform_data" "deployment_preflight" {
       error_message = "Existing Worker routes overlap a requested hostname: ${join(", ", module.route_preflight.overlapping_routes)}. Stop and resolve ownership/conflicts before continuing."
     }
   }
+
+  depends_on = [terraform_data.staging_origin_ownership]
 }
 
 resource "cloudflare_d1_database" "events" {
