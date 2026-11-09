@@ -257,3 +257,23 @@ nodeTest("examples keep production defaults safe and isolate the approved Kurocy
     }
   }
 });
+
+nodeTest("webhook alerts default enabled and are disabled only for Kurocyber staging", async () => {
+  const variables = await terraformFile("variables.tf");
+  assert.match(variableBody(variables, "alert_webhook_enabled"), /type\s*=\s*bool\s*default\s*=\s*true/);
+
+  const main = await terraformFile("main.tf");
+  const app = resourceBody(main, "cloudflare_workers_script", "app");
+  assert.match(app, /name\s*=\s*"ALERT_WEBHOOK_ENABLED"\s*type\s*=\s*"plain_text"\s*text\s*=\s*tostring\(var\.alert_webhook_enabled\)/);
+  const secretProvisioner = resourceBody(main, "terraform_data", "worker_secrets");
+  assert.match(secretProvisioner, /MOQESH_ALERT_WEBHOOK_ENABLED\s*=\s*tostring\(var\.alert_webhook_enabled\)/);
+  assert.match(secretProvisioner, /var\.alert_webhook_enabled/);
+
+  const staging = await terraformFile("examples/kurocyber-staging.tfvars.example");
+  const basic = await terraformFile("examples/basic.tfvars.example");
+  assert.match(staging, /^alert_webhook_enabled\s*=\s*false$/m);
+  assert.doesNotMatch(basic, /^alert_webhook_enabled\s*=\s*false$/m);
+
+  const outputs = await terraformFile("outputs.tf");
+  assert.match(outputs, /output "secret_binding_names" \{[\s\S]*?value\s*=\s*var\.alert_webhook_enabled\s*\?[\s\S]*?:\s*\[var\.lure_key_secret_binding_name\]/);
+});

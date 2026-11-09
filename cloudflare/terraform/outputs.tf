@@ -39,7 +39,7 @@ output "d1_migrations_verified" {
 }
 
 output "worker_secret_bindings_verified" {
-  description = "True only after the Terraform apply uploaded and verified both Worker secret binding names."
+  description = "True only after the Terraform apply uploaded and verified the Worker secret bindings required by this configuration."
   value       = terraform_data.worker_secrets.id != ""
 }
 
@@ -49,9 +49,9 @@ output "lure_paths" {
 }
 
 output "secret_binding_names" {
-  description = "Names of Cloudflare-managed Worker secret bindings; values are never output or stored in Terraform."
-  value = [
+  description = "Required Worker secret binding names for this configuration; secret values are never output or stored in Terraform."
+  value = var.alert_webhook_enabled ? [
     var.lure_key_secret_binding_name,
     var.alert_webhook_secret_binding_name,
-  ]
+  ] : [var.lure_key_secret_binding_name]
 }

@@ -2,7 +2,6 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
-const REQUIRED_SECRET_NAMES = ["LURE_KEY_SECRET", "ALERT_WEBHOOK_URL"];
 
 export async function provisionWorkerSecrets({
   accountId,
@@ -10,6 +9,7 @@ export async function provisionWorkerSecrets({
   token = process.env.CLOUDFLARE_API_TOKEN,
   lureKeySecret = process.env.MOQESH_LURE_KEY_SECRET,
   alertWebhookUrl = process.env.MOQESH_ALERT_WEBHOOK_URL,
+  alertWebhookEnabled = process.env.MOQESH_ALERT_WEBHOOK_ENABLED !== "false",
   lureKeySecretName = process.env.MOQESH_LURE_KEY_SECRET_BINDING ?? "LURE_KEY_SECRET",
   alertWebhookSecretName = process.env.MOQESH_ALERT_WEBHOOK_SECRET_BINDING ?? "ALERT_WEBHOOK_URL",
   fetcher = fetch,
@@ -33,29 +33,33 @@ export async function provisionWorkerSecrets({
   if (alertWebhookSecretName !== "ALERT_WEBHOOK_URL") {
     throw new Error("The required webhook secret binding name is ALERT_WEBHOOK_URL");
   }
-  validateWebhookUrl(alertWebhookUrl);
+  if (alertWebhookEnabled) validateWebhookUrl(alertWebhookUrl);
 
   const scriptPath = `${API_BASE}/accounts/${accountId}/workers/scripts/${encodeURIComponent(scriptName)}`;
+  const secrets = {
+    [lureKeySecretName]: {
+      name: lureKeySecretName,
+      type: "secret_text",
+      text: lureKeySecret,
+    },
+  };
+  const requiredSecretNames = [lureKeySecretName];
+  if (alertWebhookEnabled) {
+    secrets[alertWebhookSecretName] = {
+      name: alertWebhookSecretName,
+      type: "secret_text",
+      text: alertWebhookUrl,
+    };
+    requiredSecretNames.push(alertWebhookSecretName);
+  }
+
   const updateResponse = await fetcher(`${scriptPath}/secrets-bulk`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      secrets: {
-        [lureKeySecretName]: {
-          name: lureKeySecretName,
-          type: "secret_text",
-          text: lureKeySecret,
-        },
-        [alertWebhookSecretName]: {
-          name: alertWebhookSecretName,
-          type: "secret_text",
-          text: alertWebhookUrl,
-        },
-      },
-    }),
+    body: JSON.stringify({ secrets }),
   });
   await assertSuccessfulResponse(updateResponse);
 
@@ -69,7 +73,7 @@ export async function provisionWorkerSecrets({
       ? verification.result.map((secret) => secret?.name)
       : [],
   );
-  const missing = REQUIRED_SECRET_NAMES.filter((name) => !names.has(name));
+  const missing = requiredSecretNames.filter((name) => !names.has(name));
   if (missing.length > 0) {
     throw new Error(`Worker secret binding verification failed: ${missing.join(", ")}`);
   }
@@ -111,7 +115,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     accountId: process.env.MOQESH_ACCOUNT_ID,
     scriptName: process.env.MOQESH_WORKER_NAME,
   }).then(() => {
-    console.log("Uploaded and verified Worker secret bindings: LURE_KEY_SECRET, ALERT_WEBHOOK_URL");
+    const names = process.env.MOQESH_ALERT_WEBHOOK_ENABLED === "false"
+      ? "LURE_KEY_SECRET"
+      : "LURE_KEY_SECRET, ALERT_WEBHOOK_URL";
+    console.log(`Uploaded and verified Worker secret bindings: ${names}`);
   }).catch((error) => {
     console.error(error instanceof Error ? error.message : "Worker secret provisioning failed");
     process.exitCode = 1;

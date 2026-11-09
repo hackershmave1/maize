@@ -171,6 +171,56 @@ nodeTest("secret provisioner uploads Worker secrets without printing their value
   assert.equal(logged.join("\n").includes(webhookUrl), false);
 });
 
+nodeTest("secret provisioner uploads and verifies only the lure key when webhook alerts are disabled", async () => {
+  assert.equal(typeof secretModule.provisionWorkerSecrets, "function");
+  const calls = [];
+
+  await secretModule.provisionWorkerSecrets({
+    accountId: "a".repeat(32),
+    scriptName: "moqesh-kurocyber-staging",
+    token: "not-a-real-token",
+    lureKeySecret: "local-test-secret-0123456789-abcdefgh",
+    alertWebhookEnabled: false,
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return init.method === "PATCH"
+        ? apiResponse({})
+        : apiResponse([{ name: "LURE_KEY_SECRET", type: "secret_text" }]);
+    },
+  });
+
+  const payload = JSON.parse(calls[0].init.body);
+  assert.deepEqual(Object.keys(payload.secrets), ["LURE_KEY_SECRET"]);
+  assert.deepEqual(payload.secrets.LURE_KEY_SECRET, {
+    name: "LURE_KEY_SECRET",
+    type: "secret_text",
+    text: "local-test-secret-0123456789-abcdefgh",
+  });
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].url, /\/workers\/scripts\/moqesh-kurocyber-staging\/secrets$/);
+});
+
+nodeTest("disabled secret provisioner still rejects a weak lure key before making API calls", async () => {
+  assert.equal(typeof secretModule.provisionWorkerSecrets, "function");
+  let requests = 0;
+
+  await assert.rejects(
+    secretModule.provisionWorkerSecrets({
+      accountId: "a".repeat(32),
+      scriptName: "moqesh-kurocyber-staging",
+      token: "not-a-real-token",
+      lureKeySecret: "too-short",
+      alertWebhookEnabled: false,
+      fetcher: async () => {
+        requests += 1;
+        return apiResponse();
+      },
+    }),
+    /at least 32 bytes/,
+  );
+  assert.equal(requests, 0);
+});
+
 nodeTest("secret provisioner rejects weak lure keys before making API calls", async () => {
   assert.equal(typeof secretModule.provisionWorkerSecrets, "function");
   let requests = 0;

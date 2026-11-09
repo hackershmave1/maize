@@ -229,6 +229,12 @@ variable "alert_webhook_secret_binding_name" {
   }
 }
 
+variable "alert_webhook_enabled" {
+  description = "Whether to send external webhook alerts. Set false only when an installation is intentionally deployed without an alert destination."
+  type        = bool
+  default     = true
+}
+
 variable "secret_rotation_revision" {
   description = "Non-secret revision marker. Increment it whenever either Worker secret is rotated."
   type        = string

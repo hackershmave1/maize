@@ -21,5 +21,6 @@ retention_days                   = 30
 access_session_duration          = "8h"
 lure_key_secret_binding_name     = "LURE_KEY_SECRET"
 alert_webhook_secret_binding_name = "ALERT_WEBHOOK_URL"
+alert_webhook_enabled            = false
 secret_rotation_revision         = "initial"
 enable_public_route              = false

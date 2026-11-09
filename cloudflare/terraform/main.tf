@@ -257,6 +257,11 @@ resource "cloudflare_workers_script" "app" {
       text = "true"
     },
     {
+      name = "ALERT_WEBHOOK_ENABLED"
+      type = "plain_text"
+      text = tostring(var.alert_webhook_enabled)
+    },
+    {
       name = "BAIT_API_PATH"
       type = "plain_text"
       text = var.bait_api_path
@@ -361,10 +366,12 @@ resource "terraform_data" "worker_secrets" {
     secret_rotation_revision = var.secret_rotation_revision
     lure_key_binding_name    = var.lure_key_secret_binding_name
     webhook_binding_name     = var.alert_webhook_secret_binding_name
+    alert_webhook_enabled    = var.alert_webhook_enabled
   }
 
   triggers_replace = [
     var.secret_rotation_revision,
+    var.alert_webhook_enabled,
     filesha256("${path.module}/scripts/provision-worker-secrets.mjs"),
   ]
 
@@ -375,6 +382,7 @@ resource "terraform_data" "worker_secrets" {
       MOQESH_WORKER_NAME                  = cloudflare_workers_script.app.script_name
       MOQESH_LURE_KEY_SECRET_BINDING      = var.lure_key_secret_binding_name
       MOQESH_ALERT_WEBHOOK_SECRET_BINDING = var.alert_webhook_secret_binding_name
+      MOQESH_ALERT_WEBHOOK_ENABLED        = tostring(var.alert_webhook_enabled)
     }
   }
 
