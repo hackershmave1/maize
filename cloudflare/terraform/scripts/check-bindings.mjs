@@ -52,6 +52,9 @@ export function checkDeploymentBindings(wrangler, terraform) {
   if (!/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/.test(stagingBindings)) {
     errors.push("Terraform staging origin must declare ASSETS in bindings with type assets (provider 5.28.1).");
   }
+  if (!/\{\s*name\s*=\s*"STAGING_HOSTNAME"\s*type\s*=\s*"plain_text"\s*text\s*=\s*var\.protected_hostname\s*\}/.test(stagingBindings)) {
+    errors.push("Terraform staging origin must bind STAGING_HOSTNAME as plain_text from var.protected_hostname.");
+  }
   const stagingAssetConfig = stagingOrigin.match(/\bassets\s*=\s*\{[\s\S]*?\bconfig\s*=\s*\{([\s\S]*?)\}/)?.[1] ?? "";
   for (const [, field] of stagingAssetConfig.matchAll(/^\s*(\w+)\s*=/gm)) {
     if (!ASSET_CONFIG_FIELDS.has(field)) {

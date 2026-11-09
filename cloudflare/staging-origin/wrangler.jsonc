@@ -3,6 +3,9 @@
   "name": "moqesh-staging-origin",
   "main": "worker.js",
   "compatibility_date": "2026-11-08",
+  "vars": {
+    "STAGING_HOSTNAME": "staging.kurocyber.com"
+  },
   "assets": {
     "directory": "./site",
     "binding": "ASSETS",

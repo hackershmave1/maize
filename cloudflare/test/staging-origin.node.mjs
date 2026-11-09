@@ -3,12 +3,66 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import * as engine from "../staging-origin/site/game-engine.js";
+import originWorker from "../staging-origin/worker.js";
 import {
   advance,
   createGameState,
   intersects,
   jump,
 } from "../staging-origin/site/game-engine.js";
+
+test("origin denies workers.dev and unexpected hosts without touching assets", async () => {
+  for (const hostname of [
+    "moqesh-staging-origin.account.workers.dev",
+    "preview.moqesh-staging-origin.account.workers.dev",
+    "unexpected.example",
+    "staging.kurocyber.com.unexpected.example",
+  ]) {
+    let assetCalls = 0;
+    const response = await originWorker.fetch(
+      new Request(`https://${hostname}/game.js`, { headers: { host: "staging.kurocyber.com" } }),
+      {
+        STAGING_HOSTNAME: "staging.kurocyber.com",
+        ASSETS: { fetch() { assetCalls += 1; return new Response("private assets"); } },
+      },
+    );
+    assert.equal(response.status, 404, hostname);
+    assert.equal(assetCalls, 0, hostname);
+    assert.equal(await response.text(), "Not Found");
+  }
+});
+
+test("origin forwards the approved staging request unchanged to assets", async () => {
+  const request = new Request("https://staging.kurocyber.com/game.js?version=1");
+  const expected = new Response("game asset");
+  let assetCalls = 0;
+  const response = await originWorker.fetch(request, {
+    STAGING_HOSTNAME: "staging.kurocyber.com",
+    ASSETS: { fetch(received) {
+      assetCalls += 1;
+      assert.equal(received, request);
+      return expected;
+    } },
+  });
+  assert.equal(response, expected);
+  assert.equal(assetCalls, 1);
+});
+
+test("origin allows localhost and loopback for local preview", async () => {
+  for (const hostname of ["localhost", "127.0.0.1"]) {
+    const response = await originWorker.fetch(new Request(`http://${hostname}:8787/`), {
+      ASSETS: { fetch() { return new Response("local asset"); } },
+    });
+    assert.equal(await response.text(), "local asset");
+  }
+});
+
+test("origin fails closed when its staging hostname binding is missing", async () => {
+  const response = await originWorker.fetch(new Request("https://staging.kurocyber.com/"), {
+    ASSETS: { fetch() { assert.fail("Assets must not be called without the hostname binding"); } },
+  });
+  assert.equal(response.status, 404);
+});
 
 test("a new game starts grounded, stopped, and at score zero", () => {
   assert.deepEqual(createGameState(), {

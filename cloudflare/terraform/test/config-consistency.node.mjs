@@ -105,8 +105,25 @@ nodeTest("staging origin is opt-in and uploads only the configured private stati
   assert.match(origin, /compatibility_date\s*=\s*"2026-11-08"/);
   assert.match(origin, /assets\s*=\s*\{\s*directory\s*=\s*"\$\{path\.module\}\/\.\.\/staging-origin\/site"/);
   assert.match(origin, /config\s*=\s*\{\s*run_worker_first\s*=\s*true\s*not_found_handling\s*=\s*"404-page"/);
-  assert.match(origin, /bindings\s*=\s*\[\s*\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}\s*,?\s*\]/);
+  assert.match(origin, /bindings\s*=\s*\[\s*\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/);
+  assert.match(origin, /\{\s*name\s*=\s*"STAGING_HOSTNAME"\s*type\s*=\s*"plain_text"\s*text\s*=\s*var\.protected_hostname\s*\}/);
   assert.match(origin, /depends_on\s*=\s*\[terraform_data\.deployment_preflight\]/);
+});
+
+nodeTest("staging hostname binding is required by the checker and configured for local preview", async () => {
+  const main = await terraformFile("main.tf");
+  const origin = resourceBody(main, "cloudflare_workers_script", "staging_origin");
+  const invalidOrigins = [
+    origin.replace(/\{\s*name\s*=\s*"STAGING_HOSTNAME"[\s\S]*?\}/, ""),
+    origin.replace(/text\s*=\s*var\.protected_hostname/, 'text = "unexpected.example"'),
+  ];
+  for (const invalid of invalidOrigins) {
+    const errors = configModule.checkDeploymentBindings({}, main.replace(origin, invalid));
+    assert.ok(errors.some((error) => /staging origin.*STAGING_HOSTNAME.*protected_hostname/.test(error)));
+  }
+  const local = JSON.parse(await readFile(new URL("../../staging-origin/wrangler.jsonc", import.meta.url), "utf8"));
+  assert.equal(local.vars?.STAGING_HOSTNAME, "staging.kurocyber.com");
+  assert.equal(local.assets.run_worker_first, true);
 });
 
 nodeTest("binding checker enforces the pinned provider staging assets schema", async () => {
