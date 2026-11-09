@@ -10,7 +10,7 @@ variable "installation_id" {
   type = string
 }
 
-variable "worker_name" {
+variable "account_id" {
   type = string
 }
 
@@ -23,8 +23,14 @@ variable "existing_sources" {
 }
 
 locals {
-  owner_marker         = "moqesh-staging-origin-owner:${sha256(var.installation_id)}"
-  read_existing_script = var.enabled && contains(var.existing_script_names, var.worker_name)
+  installation_digest  = sha256("${lower(var.account_id)}:${var.installation_id}")
+  worker_name          = "moqesh-staging-origin-${substr(local.installation_digest, 0, 16)}"
+  owner_marker         = "moqesh-staging-origin-owner:${local.installation_digest}"
+  read_existing_script = var.enabled && contains(var.existing_script_names, local.worker_name)
+}
+
+output "worker_name" {
+  value = local.worker_name
 }
 
 output "owner_marker" {

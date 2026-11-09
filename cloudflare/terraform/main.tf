@@ -27,10 +27,11 @@ data "cloudflare_workers_scripts" "staging_origin_candidates" {
 data "cloudflare_workers_script" "existing_staging_origin" {
   count       = module.staging_origin_ownership.read_existing_script ? 1 : 0
   account_id  = var.account_id
-  script_name = var.staging_origin_worker_name
+  script_name = local.staging_origin_worker_name
 }
 
 locals {
+  staging_origin_worker_name  = module.staging_origin_ownership.worker_name
   staging_origin_owner_marker = module.staging_origin_ownership.owner_marker
   target_hostnames            = [var.protected_hostname, var.admin_hostname]
   existing_routes = [
@@ -52,7 +53,7 @@ module "staging_origin_ownership" {
   source          = "./modules/staging-origin-ownership"
   enabled         = var.create_staging_origin
   installation_id = var.installation_id
-  worker_name     = var.staging_origin_worker_name
+  account_id      = var.account_id
   existing_script_names = var.create_staging_origin ? [
     for script in data.cloudflare_workers_scripts.staging_origin_candidates[0].result : script.id
   ] : []
@@ -155,7 +156,7 @@ resource "cloudflare_zero_trust_access_application" "admin" {
 resource "cloudflare_workers_script" "staging_origin" {
   count              = var.create_staging_origin ? 1 : 0
   account_id         = var.account_id
-  script_name        = var.staging_origin_worker_name
+  script_name        = local.staging_origin_worker_name
   content            = replace(file("${path.module}/../staging-origin/worker.js"), "@@MOQESH_STAGING_ORIGIN_OWNER@@", local.staging_origin_owner_marker)
   main_module        = "worker.js"
   compatibility_date = "2026-11-08"
@@ -184,7 +185,7 @@ resource "cloudflare_workers_script" "staging_origin" {
 resource "cloudflare_workers_script_subdomain" "staging_origin_disabled" {
   count            = var.create_staging_origin ? 1 : 0
   account_id       = var.account_id
-  script_name      = var.staging_origin_worker_name
+  script_name      = local.staging_origin_worker_name
   enabled          = false
   previews_enabled = false
 
@@ -297,7 +298,7 @@ resource "cloudflare_workers_script" "app" {
 
   lifecycle {
     precondition {
-      condition     = (var.create_staging_origin ? var.staging_origin_worker_name : var.origin_service_name) != var.worker_name
+      condition     = (var.create_staging_origin ? local.staging_origin_worker_name : var.origin_service_name) != var.worker_name
       error_message = "The ORIGIN service binding must not route this Worker back to itself."
     }
   }

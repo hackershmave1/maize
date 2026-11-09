@@ -3,6 +3,11 @@ output "worker_name" {
   value       = cloudflare_workers_script.app.script_name
 }
 
+output "staging_origin_worker_name" {
+  description = "Account- and installation-derived staging origin Worker name, or null when staging is disabled."
+  value       = var.create_staging_origin ? local.staging_origin_worker_name : null
+}
+
 output "origin_service_name" {
   description = "Selected ORIGIN Worker service name, whether managed staging or an existing external service."
   value       = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name

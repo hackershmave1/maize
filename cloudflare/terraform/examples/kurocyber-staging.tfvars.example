@@ -5,7 +5,6 @@ admin_hostname                   = "admin-staging.kurocyber.com"
 worker_name                      = "moqesh-kurocyber-staging"
 d1_database_name                 = "moqesh-kurocyber-staging-events"
 create_staging_origin            = true
-staging_origin_worker_name       = "moqesh-staging-origin"
 origin_service_name              = ""
 origin_service_environment       = "production"
 installation_id                  = "REPLACE_WITH_RANDOM_INSTALLATION_ID"

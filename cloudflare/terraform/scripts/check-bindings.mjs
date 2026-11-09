@@ -48,6 +48,13 @@ export function checkDeploymentBindings(wrangler, terraform) {
   const stagingOrigin = terraform.match(
     /resource\s+"cloudflare_workers_script"\s+"staging_origin"\s*\{([\s\S]*?)\n\}/,
   )?.[1] ?? "";
+  if (
+    !/\bscript_name\s*=\s*local\.staging_origin_worker_name\b/.test(stagingOrigin)
+    || !/\bstaging_origin_worker_name\s*=\s*module\.staging_origin_ownership\.worker_name\b/.test(terraform)
+    || /variable\s+"staging_origin_worker_name"/.test(terraform)
+  ) {
+    errors.push("Terraform staging origin must use the installation-derived Worker name without an override.");
+  }
   const stagingBindings = stagingOrigin.match(/\bbindings\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
   if (!/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/.test(stagingBindings)) {
     errors.push("Terraform staging origin must declare ASSETS in bindings with type assets (provider 5.28.1).");
