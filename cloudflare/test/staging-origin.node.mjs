@@ -16,13 +16,13 @@ test("origin denies workers.dev and unexpected hosts without touching assets", a
     "moqesh-staging-origin.account.workers.dev",
     "preview.moqesh-staging-origin.account.workers.dev",
     "unexpected.example",
-    "staging.kurocyber.com.unexpected.example",
+    "staging.example.com.unexpected.example",
   ]) {
     let assetCalls = 0;
     const response = await originWorker.fetch(
-      new Request(`https://${hostname}/game.js`, { headers: { host: "staging.kurocyber.com" } }),
+      new Request(`https://${hostname}/game.js`, { headers: { host: "staging.example.com" } }),
       {
-        STAGING_HOSTNAME: "staging.kurocyber.com",
+        STAGING_HOSTNAME: "staging.example.com",
         ASSETS: { fetch() { assetCalls += 1; return new Response("private assets"); } },
       },
     );
@@ -33,11 +33,11 @@ test("origin denies workers.dev and unexpected hosts without touching assets", a
 });
 
 test("origin forwards the approved staging request unchanged to assets", async () => {
-  const request = new Request("https://staging.kurocyber.com/game.js?version=1");
+  const request = new Request("https://staging.example.com/game.js?version=1");
   const expected = new Response("game asset");
   let assetCalls = 0;
   const response = await originWorker.fetch(request, {
-    STAGING_HOSTNAME: "staging.kurocyber.com",
+    STAGING_HOSTNAME: "staging.example.com",
     ASSETS: { fetch(received) {
       assetCalls += 1;
       assert.equal(received, request);
@@ -58,7 +58,7 @@ test("origin allows localhost and loopback for local preview", async () => {
 });
 
 test("origin fails closed when its staging hostname binding is missing", async () => {
-  const response = await originWorker.fetch(new Request("https://staging.kurocyber.com/"), {
+  const response = await originWorker.fetch(new Request("https://staging.example.com/"), {
     ASSETS: { fetch() { assert.fail("Assets must not be called without the hostname binding"); } },
   });
   assert.equal(response.status, 404);

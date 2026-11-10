@@ -1,5 +1,10 @@
 # Deploying Animal Pot in front of your app
 
+**The best defense is a good offense.**
+
+Here, offense means defensive deception on infrastructure you are authorized
+to protect, not attacking anyone else's systems.
+
 This guide takes you from zero to a working Animal Pot installation on your own
 Cloudflare account. Animal Pot runs as a Cloudflare Worker in front of an
 existing website: ordinary visitors reach your site unchanged, while scanners

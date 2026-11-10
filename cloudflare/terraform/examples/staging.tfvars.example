@@ -1,9 +1,9 @@
 account_id            = "REPLACE_WITH_32_HEX_ACCOUNT_ID"
 zone_id               = "REPLACE_WITH_32_HEX_ZONE_ID"
-protected_hostname    = "staging.kurocyber.com"
-admin_hostname        = "admin-staging.kurocyber.com"
-worker_name           = "moqesh-kurocyber-staging"
-d1_database_name      = "moqesh-kurocyber-staging-events"
+protected_hostname    = "staging.example.com"
+admin_hostname        = "admin-staging.example.com"
+worker_name           = "moqesh-example-staging"
+d1_database_name      = "moqesh-example-staging-events"
 create_staging_origin = true
 # Keep false for the first apply; set true afterwards so Worker updates omit the applied v1 DO migration.
 agent_session_migration_applied   = false

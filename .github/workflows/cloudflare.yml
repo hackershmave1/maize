@@ -3,13 +3,7 @@ name: Cloudflare
 on:
   push:
     branches: [main, master]
-    paths:
-      - "cloudflare/**"
-      - ".github/workflows/cloudflare.yml"
   pull_request:
-    paths:
-      - "cloudflare/**"
-      - ".github/workflows/cloudflare.yml"
   workflow_dispatch:
 
 permissions:

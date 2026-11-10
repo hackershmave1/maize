@@ -1,5 +1,7 @@
 # Animal Pot
 
+**The best defense is a good offense.**
+
 <img src="web/public/animal-pot-logo.jpg" alt="Animal Pot logo" width="220">
 
 **An edge honeypot for automated attackers, running on Cloudflare Workers.**
@@ -12,8 +14,11 @@ blocked. An Access-protected dashboard shows every detection and lets an
 operator release a blocked source.
 
 Animal Pot is a fork of [juliourena/moqesh](https://github.com/juliourena/moqesh),
-rebuilt for Cloudflare's edge. It no longer ships the upstream Python server,
-remote sensors, or Docker images. Internal names (the `moqesh` Worker, the
+rebuilt for Cloudflare's edge. Its Cloudflare deployment does not use the
+upstream Python server, remote sensors, or Docker images. Legacy code and
+Docker/agent release automation remain in this repository pending the
+Cloudflare-only cleanup; they are not part of the Worker deployment.
+Internal names (the `moqesh` Worker, the
 `MOQESH_` prefixes) are kept from the upstream code.
 
 **Documentation:** [Cloudflare Worker, deployment, and demo](cloudflare/README.md)
@@ -112,8 +117,9 @@ python3 -m unittest discover -s cloudflare/test -p 'demo_attack_test.py' -v
 ```
 
 CI ([`.github/workflows/cloudflare.yml`](.github/workflows/cloudflare.yml)) runs
-these checks plus `terraform fmt` and `terraform validate` on pull requests and
-pushes that touch `cloudflare/`. It uses no Cloudflare or Terraform
+these checks plus `terraform fmt`, `terraform validate`, and an offline
+public-content regression scan on pull requests and main/master pushes,
+including documentation-only changes. It uses no Cloudflare or Terraform
 credentials and never deploys.
 
 ## Deploying
@@ -150,9 +156,19 @@ operator-approved stages:
 8. manual unblock and recovery
 
 The script shows every request and response. This is a live exercise: it
-contains the IP you run it from. It targets the Kurocyber staging hostnames by
-default; pass `--base-url https://app.example.com --admin-url
-https://admin.example.com` for your own deployment. See
+contains the IP you run it from. Both hostnames must be supplied explicitly;
+there is no default live target. For an isolated installation using the
+bundled staging runner, run:
+
+```sh
+python3 cloudflare/scripts/demo_attack.py \
+  --base-url https://staging.example.com \
+  --admin-url https://admin-staging.example.com
+```
+
+Replace these reserved example domains with your staging hostnames. The demo
+checks for the bundled runner's HTML, so it is not a generic acceptance test
+for arbitrary application content. See
 [Guided attack demonstration](cloudflare/README.md#guided-attack-demonstration).
 
 ## Known limitations

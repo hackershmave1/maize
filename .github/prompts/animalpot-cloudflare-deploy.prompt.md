@@ -17,10 +17,12 @@ An approval for one plan never approves a later plan or a DNS change. If the
 requested work is documentation-only or local validation, do not make
 Cloudflare API calls or run Terraform plan/apply.
 
-For the approved Kurocyber staging action, scope all work exclusively to
-`staging.kurocyber.com` and `admin-staging.kurocyber.com`. Never modify
-production Workers, D1 databases, Durable Object namespaces, secrets, DNS,
-routes, `kurocyber.com`, `www.kurocyber.com`, or the existing wildcard route.
+Obtain the exact public and admin staging hostnames from the customer and
+scope all work exclusively to those approved hostnames and isolated resources.
+`staging.example.com` and `admin-staging.example.com` are reserved examples,
+not live targets or prior approvals. Never modify production Workers, D1
+databases, Durable Object namespaces, secrets, DNS, routes, or unrelated
+wildcard routes.
 Production is out of scope and needs separate discovery, state, plan, and
 explicit consent.
 
@@ -35,26 +37,28 @@ Use the available Cloudflare MCP tools only for read-only inspection. Confirm:
 - Every existing Worker route that may overlap either hostname, including
   host-wide and more-specific path routes. **Stop if an exact-host conflict or
   unclear ownership exists. Do not replace, delete, or adopt a route.** For
-  Kurocyber staging, the existing `*.kurocyber.com/*` route is expected and
-  must remain unchanged; verify that only the approved, more-specific exact
+  isolated staging, any discovered wildcard route must remain unchanged;
+  do not assume one exists. Verify that only the approved, more-specific exact
   staging routes are planned and that no wildcard edit is proposed.
-- For a normal deployment, the named `ORIGIN` service and environment exist
+- For `origin_type = "worker"`, the named `ORIGIN` service and environment exist
   and refer to the customer's existing origin Worker—not this new Worker and
-  not a service Terraform should create or delete. For the approved Kurocyber
-  staging action, use the separate static origin selected by
+  not a service Terraform should create or delete. For `origin_type = "dns"`,
+  verify that the protected hostname's proxied record points to the existing
+  origin; this mode uses no `ORIGIN` service binding. For isolated
+  staging, use the separate static origin selected by
   `create_staging_origin = true`; do not bind production as the origin.
 - The requested Access team domain and exact operator email policy.
-- For Kurocyber staging, verify the current DNS state for both exact hostnames
+- For isolated staging, verify the current DNS state for both exact hostnames
   before any Terraform plan/apply. Terraform does not create DNS. If either
   record is missing or unproxied, stop and propose a separate DNS change for
   explicit approval; do not treat Terraform-plan approval as DNS approval.
-- For Kurocyber staging, verify one access-controlled HCP Terraform workspace
+- For isolated staging, verify one access-controlled HCP Terraform workspace
   and state is the sole writer for the `(lower(account_id), installation_id)`
   pair. Never manage the same pair or derived static-origin Worker name from
   another state/workspace.
 - That the customer accepts whole-host behavior: all requests to the protected
   hostname pass through the Worker, ordinary uncontained traffic is forwarded
-  to `ORIGIN` without event logging, and configured lure paths are intercepted
+  to the selected origin without event logging, and configured lure paths are intercepted
   at the same URL. Explain that this still runs the Worker on ordinary traffic;
   it is not lure-path-only routing.
 
@@ -96,10 +100,10 @@ start containment.
   `terraform/terraform.tfvars`; replace all placeholders and verify that
   `lure_paths` lists exactly the fixed disclosure lures plus the configured
   `bait_api_path` (Terraform validation enforces this).
-- For Kurocyber staging, instead copy
-  `terraform/examples/kurocyber-staging.tfvars.example`. Preserve its isolated
-  Worker (`moqesh-kurocyber-staging`) and D1
-  (`moqesh-kurocyber-staging-events`) names, set a stable unique non-secret
+- For isolated staging, instead copy
+  `terraform/examples/staging.tfvars.example`. Replace its example hostnames
+  and isolated Worker/D1 names with customer-selected values; never rename
+  resources of an existing installation merely to match an example. Set a stable unique non-secret
   `installation_id`, and keep `create_staging_origin = true`. Leave
   `origin_service_name` empty so `ORIGIN` binds to the generated static origin.
   That Worker name is `moqesh-staging-origin-` plus the first 16 lowercase hex
@@ -119,19 +123,20 @@ helper and verifies migrations `0001_events.sql`, `0002_admin.sql`,
 `0005_rabbit_hole_events.sql`, initializes runtime settings without
 overwriting existing dashboard values, uploads/verifies the secret bindings,
 configures the `* * * * *` scheduled trigger, and creates the Access-protected
-admin route. For Kurocyber staging, the bootstrap plan also creates the
+admin route. For isolated staging, the bootstrap plan also creates the
 private static-origin Worker and its assets, with no public staging site
 route, DNS, production resources, or wildcard changes. Both proxied DNS
 records must already exist before planning. A failed migration or secret
 verification must halt before either route is attached.
 
-For Kurocyber staging, the expected DNS records to propose (never create
-without separate explicit DNS approval) are:
+For isolated staging, discover the customer's required DNS records and targets.
+The following are examples only; never create them without selecting the
+customer's actual targets and obtaining separate explicit DNS approval:
 
 | Type | Name | Target | Proxy |
 |---|---|---|---|
-| CNAME | `staging` (`staging.kurocyber.com`) | `kurocyber.com` | Proxied |
-| CNAME | `admin-staging` (`admin-staging.kurocyber.com`) | `kurocyber.com` | Proxied |
+| CNAME | `staging` (`staging.example.com`) | `example.com` | Proxied |
+| CNAME | `admin-staging` (`admin-staging.example.com`) | `example.com` | Proxied |
 
 Do not assume these records are currently present. The static origin must only
 serve the staging hostname through Moqesh's `ORIGIN` service binding; its
@@ -147,7 +152,7 @@ Create a saved Terraform plan and inspect it in full. Show the plan, including
 resource additions, route patterns, Access policy, D1 database, Worker bindings,
 provisioner changes, and any deletion/replacement, to the user. Confirm that it
 does not manage DNS, an unrelated route, or an external existing origin
-Worker. For Kurocyber staging, confirm it includes only the approved
+Worker. For isolated staging, confirm it includes only the approved
 installation's private static-origin Worker and no production or wildcard
 changes. **Wait for the user's explicit approval of that exact plan.** Only
 then apply that saved plan
@@ -165,7 +170,7 @@ Access must protect only the admin hostname with the confirmed email policy.
 Keep the production hostname route disabled until an equivalent staging
 deployment has passed acceptance. A staging hostname requires its own separate
 reviewed plan to attach the public route for live acceptance; that staging
-approval does not authorize or enable a production route. For the Kurocyber
+approval does not authorize or enable a production route. For the isolated
 staging action, production remains entirely out of scope even after staging
 acceptance; do not proceed to a production plan or modify production state.
 
@@ -182,7 +187,7 @@ human approval before applying that exact saved plan through Terraform.
 Proceed to production only after staging acceptance is documented and
 reviewed. Production requires fresh discovery, production-specific state and
 configuration, a separate full plan, and a separate explicit approval.
-For a Kurocyber staging action, stop after staging acceptance; never execute
+For a isolated staging action, stop after staging acceptance; never execute
 the production step or make any production change.
 
 After an approved apply, verify without changing state:
@@ -190,7 +195,7 @@ After an approved apply, verify without changing state:
 - The exact `protected-hostname/*` route points to the Moqesh Worker and the
   separate `admin-hostname/*` route remains Access-protected.
 - Ordinary non-lure requests pass through to the existing origin service and
-  return expected site content. For Kurocyber staging, they reach only the
+  return expected site content. For isolated staging, they reach only the
   private static origin through the `ORIGIN` binding; lures and contained
   sources must not reach it.
 - `/.env` returns a synthetic decoy at that URL. The configured
@@ -217,14 +222,14 @@ After an approved apply, verify without changing state:
 ## 5. Rollback and teardown ownership
 
 For rollback, first show a plan that disables/removes only the public route,
-wait for approval, and apply through Terraform. For Kurocyber staging, verify
+wait for approval, and apply through Terraform. For isolated staging, verify
 the actual fallback against current routes, DNS, and custom domains; do not
 assume a wildcard exists or traffic is back at the private static origin.
 Preserve D1 data unless a separately approved backup and retention decision
 authorizes deletion.
 
 Never destroy or change DNS records or an external existing origin service.
-For Kurocyber staging, the private static origin is Terraform-managed and may
+For isolated staging, the private static origin is Terraform-managed and may
 be changed or removed only if it is explicitly listed in the reviewed plan for
 that staging installation. Before uninstall, show the complete Terraform
 destroy plan and identify only the resources this module owns: its two routes,
