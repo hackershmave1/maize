@@ -61,7 +61,11 @@ Use the available Cloudflare MCP tools only for read-only inspection. Confirm:
 Do not continue until the user confirms the complete host-wide behavior and
 exact lure paths: the fixed disclosure lures `/.env`, `/.env.production`, `/.git/config`, `/.aws/credentials`, `/config.json`, `/wp-config.php.bak`, `/backup.sql`, `/api/v1/keys`, and `/swagger.json` (each leaks the same
 synthetic key or advertises the bait API), plus the explicitly configured
-`BAIT_API_PATH`, which is the only path that confirms reuse. `/robots.txt` is
+`BAIT_API_PATH`, which is the only path that confirms reuse. After confirmation,
+the bait response leads the contained source through a 10-hop rabbit-hole chain
+of fake API data (`/api/private/billing` … `/api/internal/vault/root`, each
+requiring the per-hop token from the previous response), then blocks it after
+hop 10; hop paths are served only to sources already in the maze. `/robots.txt` is
 served by the Worker with `Disallow` hints for these paths and is not logged.
 Do not imply that any other path is a configured lure. Confirm the runtime durations, response
 budget, allowlist, retention, alert webhook destination, and staging target.
@@ -111,7 +115,8 @@ Keep `enable_public_route = false` for the first apply. Terraform must use
 `cloudflare_d1_database.events.id` for the Worker binding and migrations; never
 use Wrangler's local placeholder D1 ID. The apply runs the actual D1 migration
 helper and verifies migrations `0001_events.sql`, `0002_admin.sql`,
-`0003_containment_sources.sql`, and `0004_more_lure_routes.sql`, initializes runtime settings without
+`0003_containment_sources.sql`, `0004_more_lure_routes.sql`, and
+`0005_rabbit_hole_events.sql`, initializes runtime settings without
 overwriting existing dashboard values, uploads/verifies the secret bindings,
 configures the `* * * * *` scheduled trigger, and creates the Access-protected
 admin route. For Kurocyber staging, the bootstrap plan also creates the

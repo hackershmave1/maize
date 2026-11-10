@@ -18,6 +18,28 @@ is never logged. Lures are always handled by the Worker: enabled lures return de
 rather than reaching `ORIGIN`. A confirmed source receives decoy/maze or block
 responses across the whole hostname and is not forwarded to `ORIGIN`.
 
+### Rabbit-hole chain
+
+The confirmed `BAIT_API_PATH` response is hop 1 of a 10-hop chain of fake
+API data. Each response for hops 1–9 carries a `next` lead: the absolute URL of the next hop and
+a per-hop bearer token. The hop paths are `/api/private/billing`,
+`/api/private/team`, `/api/private/admin/users`, `/api/private/admin/keys`,
+`/api/internal/services`, `/api/internal/deploy/secrets`,
+`/api/internal/db/credentials`, `/api/internal/backups`, and
+`/api/internal/vault/root` (hop 10, which has no lead). Hop tokens and fake
+values are HMAC-derived from `LURE_KEY_SECRET`, so they are deterministic and
+contain no real credentials; hostnames use `*.example.invalid`.
+
+Chain hops are served only to a source that is already in maze mode, and only
+with that hop's token and in order: an earlier hop may be revisited, but a
+skipped hop or a wrong token gets the maze 404 and counts against the response
+budget. Every other request from that source, including the real site, still
+gets the maze 404. Each accepted hop from 2 to 10 is logged as a
+`rabbit_hole_hop` event with route `hop-2` … `hop-10`. Hop 10 ends the maze
+immediately and starts the configured block (default 24 hours). If the source
+never reaches hop 10, the normal maze duration still applies. Uncontained
+sources requesting hop paths are forwarded to `ORIGIN` like any other path.
+
 If the public route is disabled, requests to the protected hostname do not
 invoke this Worker. Route only a dedicated staging hostname during acceptance;
 the production hostname remains untouched until staging is accepted and a
@@ -45,7 +67,8 @@ return 404 without reaching the origin.
 Runtime settings and the operator allowlist are stored in D1. The admin and
 containment-index migrations (`migrations/0002_admin.sql` and
 `migrations/0003_containment_sources.sql`) and the expanded lure-route migration
-(`migrations/0004_more_lure_routes.sql`) must be applied before attaching the
+(`migrations/0004_more_lure_routes.sql`) and the rabbit-hole hop event migration
+(`migrations/0005_rabbit_hole_events.sql`) must be applied before attaching the
 Worker route. The AgentSession Durable Object migration (tag `v1`) is sent only
 while `agent_session_migration_applied = false`; set it to `true` after the
 first successful apply, because Cloudflare rejects a resent `v1` migration with
@@ -92,7 +115,7 @@ python3 cloudflare/scripts/demo_attack.py
 
 Keep `https://admin-staging.kurocyber.com` open and sign in before starting.
 The script targets **only** `https://staging.kurocyber.com`; it cannot be pointed
-at the production website. Each of six stages shows the request URL, headers,
+at the production website. Each of eight stages shows the request URL, headers,
 empty request body, expected result, HTTP status, selected response headers,
 and response body. Long responses are explicitly truncated. Type uppercase
 `NEXT` to authorize each individual request; `QUIT`, Ctrl-C, or EOF stops.
@@ -108,8 +131,10 @@ script on the browser's machine, or demonstrate the browser refresh from a
 browser on the script's host.
 
 The stages are normal browsing, missing-key rejection, synthetic credential
-discovery, synthetic-key reuse, maze diversion, and recovery after manual
-unblock. The synthetic key is deliberately visible in the lure response and
+discovery, synthetic-key reuse (hop 1), maze diversion, the rabbit hole (stage
+6 follows hops 2–10, each previewed and needing its own `NEXT`, 16 requests in
+total), the block (stage 7 expects HTTP 403), and recovery after manual
+unblock. The script refuses any lead that is not the next fixed staging hop. The synthetic key is deliberately visible in the lure response and
 reuse request; do not substitute real credentials. No deployment tokens or
 extra packages are required. The script does not follow redirects, retry
 requests, exhaust rate limits, or make authenticated admin requests.
