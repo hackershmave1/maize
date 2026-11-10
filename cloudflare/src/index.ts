@@ -1,4 +1,5 @@
-import { handleLure, isLureRequest, robotsTxt, type LureRoute } from "./lures";
+import { handleLure, isLureRequest, robotsTxt } from "./lures";
+import { matchChainHop, renderHop, type ChainRoute } from "./rabbit-hole";
 import {
   deleteExpiredAdminAudit,
   deleteExpiredContainmentSources,
@@ -27,6 +28,7 @@ import {
   deriveAgentSessionName,
   normalizeSourceIp,
   type AgentSessionSnapshot,
+  type ChainAdvanceResult,
   type MazeRequestResult,
 } from "./session-state";
 
@@ -38,6 +40,7 @@ interface AgentSessionStub {
     blockDurationMs?: number,
   ): Promise<AgentSessionSnapshot>;
   recordMazeRequest(responseBudget: number): Promise<MazeRequestResult>;
+  advanceChain(hop: number, blockDurationMs?: number): Promise<ChainAdvanceResult>;
 }
 
 interface AgentSessionNamespace {
@@ -157,17 +160,42 @@ export default {
       return blockedResponse();
     }
     if (mode.mode === "maze") {
+      const currentSettings = settings ?? await runtimeSettings(env);
       if (lureRequest) {
-        const currentSettings = settings ?? await runtimeSettings(env);
         const result = await handleLure(request, env, {
           allowlisted: false,
           enabled: currentSettings.luresEnabled,
         });
         await persistLureResult(result, env, context, currentSettings);
+        if (result.event.confirmed) return result.response;
+      }
+      const hop = await matchChainHop(request, env.LURE_KEY_SECRET);
+      if (hop !== null) {
+        try {
+          const advanced = await session.advanceChain(
+            hop,
+            currentSettings.blockDurationHours * 60 * 60_000,
+          );
+          if (advanced.accepted) {
+            await persistEvent({
+              installationId: env.INSTALLATION_ID,
+              type: "rabbit_hole_hop",
+              route: `hop-${hop}` as ChainRoute,
+              sourceIp,
+              confirmed: true,
+            }, env);
+            if (advanced.state.mode === "blocked") {
+              await reconcileContainmentSource(sourceIp, advanced.state, env);
+            }
+            // matchChainHop only matches when LURE_KEY_SECRET is set.
+            return renderHop(hop, requestUrl.origin, env.LURE_KEY_SECRET!);
+          }
+        } catch {
+          reportStateError();
+        }
       }
       let throttled = false;
       try {
-        const currentSettings = settings ?? await runtimeSettings(env);
         const result = await session.recordMazeRequest(currentSettings.responseBudget);
         throttled = result.throttled;
       } catch {

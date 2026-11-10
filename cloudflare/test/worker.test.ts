@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import worker, { type Env } from "../src";
+import { CHAIN_HOPS, hopToken } from "../src/rabbit-hole";
 
 const sourceIp = "203.0.113.7";
 const installationId = "opaque-test-installation";
@@ -18,13 +19,27 @@ function createSnapshot(mode: "ordinary" | "maze" | "blocked") {
 }
 
 function createSession(mode: "ordinary" | "maze" | "blocked" = "ordinary") {
+  let current = createSnapshot(mode);
+  let chainDepth = mode === "maze" ? 1 : 0;
   return {
-    getMode: vi.fn(async () => createSnapshot(mode)),
-    confirmKeyReuse: vi.fn(async () => createSnapshot("maze")),
+    getMode: vi.fn(async () => ({ ...current, chainDepth })),
+    confirmKeyReuse: vi.fn(async () => {
+      current = createSnapshot("maze");
+      chainDepth = 1;
+      return { ...current, chainDepth };
+    }),
     recordMazeRequest: vi.fn(async (budget: number) => ({
-      state: { ...createSnapshot("maze"), mazeRequests: budget },
+      state: { ...createSnapshot("maze"), mazeRequests: budget, chainDepth },
       throttled: false,
     })),
+    advanceChain: vi.fn(async (hop: number) => {
+      if (current.mode !== "maze" || hop > chainDepth + 1) {
+        return { accepted: false, state: { ...current, chainDepth } };
+      }
+      chainDepth = Math.max(chainDepth, hop);
+      if (hop === 10) current = createSnapshot("blocked");
+      return { accepted: true, state: { ...current, chainDepth } };
+    }),
     unblock: vi.fn(async () => createSnapshot("ordinary")),
   };
 }
@@ -360,7 +375,7 @@ it("starts quarantine after a valid synthetic-key reuse without exposing the key
 it("serves decoys for every route during maze and never reaches the origin", async () => {
   const session = createSession("maze");
   session.recordMazeRequest.mockImplementation(async (budget: number) => ({
-    state: { ...createSnapshot("maze"), mazeRequests: budget },
+    state: { ...createSnapshot("maze"), mazeRequests: budget, chainDepth: 1 },
     throttled: false,
   }));
   const { env, origin, sessionIdNames } = createEnv(session);
@@ -427,6 +442,7 @@ it("throttles at the configured response budget with the bounded decoy", async (
       ...createSnapshot("maze"),
       mazeRequests: budget,
       throttledRequests: 1,
+      chainDepth: 1,
     },
     throttled: true,
   }));
@@ -452,6 +468,7 @@ it("caches a bounded generic decoy without skipping maze accounting", async () =
       ...createSnapshot("maze"),
       mazeRequests: budget,
       throttledRequests: 1,
+      chainDepth: 1,
     },
     throttled: true,
   }));
@@ -509,6 +526,7 @@ it("reports cache failure while keeping throttling enforced", async () => {
       ...createSnapshot("maze"),
       mazeRequests: budget,
       throttledRequests: 1,
+      chainDepth: 1,
     },
     throttled: true,
   }));
@@ -629,4 +647,73 @@ it("serves robots.txt lure hints without an event or origin request", async () =
   expect(await response.text()).toContain("Disallow: /.git/config\n");
   expect(origin.fetch).not.toHaveBeenCalled();
   expect(statements.filter(({ sql }) => sql.includes("INSERT INTO events"))).toEqual([]);
+});
+
+function hopRequest(path: string, token: string) {
+  return new Request(`https://site.test${path}`, {
+    headers: { Authorization: `Bearer ${token}`, "CF-Connecting-IP": sourceIp },
+  });
+}
+
+function rootRequest() {
+  return new Request("https://site.test/", { headers: { "CF-Connecting-IP": sourceIp } });
+}
+
+it("walks all ten hops, logs each, keeps the origin unreachable, then blocks", async () => {
+  const events = createEventsDatabase();
+  const { env, origin, session } = createEnv(createSession(), { eventsDb: events.database });
+  const lure = await worker.fetch(
+    new Request("https://site.test/.env", { headers: { "CF-Connecting-IP": sourceIp } }),
+    env,
+  );
+  const key = (await lure.text()).match(/^API_KEY=(.+)$/m)![1];
+
+  let body = await (await worker.fetch(hopRequest(baitApiPath, key), env)).json() as {
+    next?: { endpoint: string; authorization: string };
+  };
+  for (const hop of CHAIN_HOPS) {
+    expect(body.next!.endpoint).toBe(`https://site.test${hop.path}`);
+    expect((await worker.fetch(rootRequest(), env)).status).toBe(404);
+    const response = await worker.fetch(hopRequest(hop.path, body.next!.authorization.slice(7)), env);
+    expect(response.status).toBe(200);
+    body = await response.json() as typeof body;
+  }
+  expect(body.next).toBeUndefined();
+  expect((await worker.fetch(rootRequest(), env)).status).toBe(403);
+  expect(origin.fetch).not.toHaveBeenCalled();
+  expect(session.advanceChain).toHaveBeenCalledTimes(9);
+  const hopRoutes = events.statements
+    .filter(({ sql, params }) => sql.includes("INSERT INTO events") && params[2] === "rabbit_hole_hop")
+    .map(({ params }) => params[3]);
+  expect(hopRoutes).toEqual(CHAIN_HOPS.map((hop) => hop.route));
+});
+
+it("returns the maze 404 for a wrong token or a skipped hop", async () => {
+  const { env, session } = createEnv(createSession("maze"));
+  const hop3 = CHAIN_HOPS[1];
+  const wrong = await worker.fetch(hopRequest(hop3.path, await hopToken(lureSecret, 4)), env);
+  const skipped = await worker.fetch(hopRequest(hop3.path, await hopToken(lureSecret, 3)), env);
+  expect(wrong.status).toBe(404);
+  expect(skipped.status).toBe(404);
+  expect(await skipped.text()).toBe('{"error":"Not found"}');
+  expect(session.recordMazeRequest).toHaveBeenCalledTimes(2);
+});
+
+it("does not serve chain hops to ordinary sources", async () => {
+  const { env, origin, session } = createEnv();
+  const response = await worker.fetch(hopRequest(CHAIN_HOPS[0].path, await hopToken(lureSecret, 2)), env);
+  expect(await response.text()).toBe("origin-ok");
+  expect(origin.fetch).toHaveBeenCalledOnce();
+  expect(session.advanceChain).not.toHaveBeenCalled();
+});
+
+it("re-serves hop 1 to a contained source that reuses the key again", async () => {
+  const { env, origin } = createEnv(createSession("maze"));
+  const lure = await worker.fetch(new Request("https://site.test/.env"), env);
+  const key = (await lure.text()).match(/^API_KEY=(.+)$/m)![1];
+  const response = await worker.fetch(hopRequest(baitApiPath, key), env);
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { next: { endpoint: string } }).next.endpoint)
+    .toBe(`https://site.test${CHAIN_HOPS[0].path}`);
+  expect(origin.fetch).not.toHaveBeenCalled();
 });

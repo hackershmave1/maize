@@ -1,4 +1,5 @@
 import type { Env } from "./index";
+import { renderHop } from "./rabbit-hole";
 
 const KEY_CONTEXT = new TextEncoder().encode("moqesh-lure-api-key-v1");
 
@@ -237,18 +238,8 @@ export async function handleLure(
     };
   }
 
-  const response = Response.json(
-    {
-      data: { id: "synthetic-account", status: "active" },
-      readonly: true,
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
-    },
-  );
+  // `confirmed` is only true when LURE_KEY_SECRET is set.
+  const response = await renderHop(1, new URL(request.url).origin, env.LURE_KEY_SECRET!);
   if (allowlisted && source !== null && env.ALERT_CONFIRMATION === "true") {
     return {
       response,

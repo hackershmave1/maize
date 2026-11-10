@@ -123,6 +123,10 @@ it("confirms a valid key from Authorization without returning or recording the k
   expect(result.event.confirmed).toBe(true);
   expect(JSON.stringify(result.event)).not.toContain(key);
   expect(JSON.stringify(result.alert ?? {})).not.toContain(key);
+  const parsed = JSON.parse(body) as { data: { id: string }; next: { endpoint: string; authorization: string } };
+  expect(parsed.data.id).toMatch(/^acct_[a-f0-9]{12}$/);
+  expect(parsed.next.endpoint).toBe("https://lure.test/api/private/billing");
+  expect(parsed.next.authorization).toMatch(/^Bearer [a-f0-9]{64}$/);
 });
 
 it("may alert on allowlisted confirmation without starting a maze or blocking", async () => {
