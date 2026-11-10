@@ -209,15 +209,32 @@ nodeTest("ORIGIN selects the managed service and production environment only wit
   const main = await terraformFile("main.tf");
   const app = resourceBody(main, "cloudflare_workers_script", "app");
   assert.match(app, /name\s*=\s*"ORIGIN"\s*type\s*=\s*"service"\s*service\s*=\s*var\.create_staging_origin \? cloudflare_workers_script\.staging_origin\[0\]\.script_name : var\.origin_service_name\s*environment\s*=\s*var\.create_staging_origin \? "production" : var\.origin_service_environment/);
-  assert.match(app, /condition\s*=\s*\(var\.create_staging_origin \? local\.staging_origin_worker_name : var\.origin_service_name\) != var\.worker_name/);
+  assert.match(app, /condition\s*=\s*var\.origin_type == "dns" \|\| \(var\.create_staging_origin \? local\.staging_origin_worker_name : var\.origin_service_name\) != var\.worker_name/);
   const outputs = await terraformFile("outputs.tf");
-  assert.match(outputs, /output "origin_service_name" \{\s*description\s*=\s*"[^"]+"\s*value\s*=\s*var\.create_staging_origin \? cloudflare_workers_script\.staging_origin\[0\]\.script_name : var\.origin_service_name\s*\}/);
+  assert.match(outputs, /output "origin_service_name" \{\s*description\s*=\s*"[^"]+"\s*value\s*=\s*var\.origin_type == "dns" \? null : \(var\.create_staging_origin \? cloudflare_workers_script\.staging_origin\[0\]\.script_name : var\.origin_service_name\)\s*\}/);
+});
+
+nodeTest("DNS origin mode omits the ORIGIN service binding and defaults to the Worker origin", async () => {
+  const variables = await terraformFile("variables.tf");
+  const originType = variableBody(variables, "origin_type");
+  assert.match(originType, /type\s*=\s*string\s*default\s*=\s*"worker"/);
+  assert.match(originType, /contains\(\["worker", "dns"\], var\.origin_type\)/);
+  assert.match(originType, /!\(var\.create_staging_origin && var\.origin_type == "dns"\)/);
+
+  const main = await terraformFile("main.tf");
+  const app = resourceBody(main, "cloudflare_workers_script", "app");
+  assert.match(app, /bindings\s*=\s*concat\(/);
+  assert.match(app, /\[for binding in \[\{\s*name\s*=\s*"ORIGIN"[\s\S]*?\}\] : binding if var\.origin_type != "dns"\]/);
+
+  const basic = await terraformFile("examples/basic.tfvars.example");
+  assert.match(basic, /^origin_type\s*=\s*"dns"$/m);
+  assert.match(basic, /^origin_service_name\s*=\s*""$/m);
 });
 
 nodeTest("staging inputs default off and validate selected origin self-binding semantics", async () => {
   const variables = await terraformFile("variables.tf");
   assert.match(variableBody(variables, "create_staging_origin"), /type\s*=\s*bool\s*default\s*=\s*false/);
-  assert.match(variableBody(variables, "origin_service_name"), /condition\s*=\s*var\.create_staging_origin \|\| \(length\(trimspace\(var\.origin_service_name\)\) > 0 && var\.origin_service_name != var\.worker_name\)/);
+  assert.match(variableBody(variables, "origin_service_name"), /condition\s*=\s*var\.create_staging_origin \|\| var\.origin_type == "dns" \|\| \(length\(trimspace\(var\.origin_service_name\)\) > 0 && var\.origin_service_name != var\.worker_name\)/);
   assert.match(variableBody(variables, "origin_service_environment"), /default\s*=\s*"production"/);
 });
 

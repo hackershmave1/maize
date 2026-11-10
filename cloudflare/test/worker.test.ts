@@ -146,6 +146,42 @@ it("passes ordinary requests to the origin unchanged", async () => {
   expect(origin.fetch).toHaveBeenCalledWith(request);
 });
 
+it("passes ordinary requests to the proxied DNS origin when no ORIGIN binding exists", async () => {
+  const { env } = createEnv();
+  const dnsEnv = { ...env, ORIGIN: undefined, PUBLIC_SITE_HOSTNAME: "Site.Test" } as unknown as Env;
+  const upstream = vi.fn(async () => new Response("dns-origin-ok", { status: 200 }));
+  vi.stubGlobal("fetch", upstream);
+  try {
+    const request = new Request("https://site.test/home?view=full");
+    const response = await worker.fetch(request, dnsEnv);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("dns-origin-ok");
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(upstream).toHaveBeenCalledWith(request);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  ["another hostname", "other.test"],
+  ["no configured public hostname", undefined],
+])("refuses DNS pass-through for %s", async (_label, publicHostname) => {
+  const { env } = createEnv();
+  const dnsEnv = { ...env, ORIGIN: undefined, PUBLIC_SITE_HOSTNAME: publicHostname } as unknown as Env;
+  const upstream = vi.fn(async () => new Response("should-not-be-called"));
+  vi.stubGlobal("fetch", upstream);
+  try {
+    const response = await worker.fetch(new Request("https://site.test/home"), dnsEnv);
+
+    expect(response.status).toBe(404);
+    expect(upstream).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it("handles the .env lure without sending it to the origin", async () => {
   const { env, origin } = createEnv();
   const response = await worker.fetch(new Request("https://site.test/.env"), env);

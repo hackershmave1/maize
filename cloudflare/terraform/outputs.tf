@@ -10,7 +10,7 @@ output "staging_origin_worker_name" {
 
 output "origin_service_name" {
   description = "Selected ORIGIN Worker service name, whether managed staging or an existing external service."
-  value       = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name
+  value       = var.origin_type == "dns" ? null : (var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name)
 }
 
 output "events_database_id" {

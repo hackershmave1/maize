@@ -61,13 +61,29 @@ variable "agent_session_migration_applied" {
   default     = false
 }
 
+variable "origin_type" {
+  description = "How ordinary traffic reaches the protected app: \"worker\" binds an existing origin Worker (or the managed staging origin); \"dns\" forwards to the server behind the hostname's proxied DNS record."
+  type        = string
+  default     = "worker"
+
+  validation {
+    condition     = contains(["worker", "dns"], var.origin_type)
+    error_message = "origin_type must be \"worker\" or \"dns\"."
+  }
+
+  validation {
+    condition     = !(var.create_staging_origin && var.origin_type == "dns")
+    error_message = "create_staging_origin requires origin_type = \"worker\"."
+  }
+}
+
 variable "origin_service_name" {
-  description = "Existing customer origin Worker service name; may be empty when create_staging_origin selects the managed origin. Terraform does not manage external origins."
+  description = "Existing customer origin Worker service name; leave empty when origin_type is \"dns\" or create_staging_origin selects the managed origin. Terraform does not manage external origins."
   type        = string
 
   validation {
-    condition     = var.create_staging_origin || (length(trimspace(var.origin_service_name)) > 0 && var.origin_service_name != var.worker_name)
-    error_message = "Unless create_staging_origin is true, origin_service_name must name an existing service and must not point this Worker back to itself."
+    condition     = var.create_staging_origin || var.origin_type == "dns" || (length(trimspace(var.origin_service_name)) > 0 && var.origin_service_name != var.worker_name)
+    error_message = "With origin_type = \"worker\" and no managed staging origin, origin_service_name must name an existing service and must not point this Worker back to itself."
   }
 }
 

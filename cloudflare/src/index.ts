@@ -53,7 +53,7 @@ interface WorkerAssets {
 }
 
 export interface Env {
-  ORIGIN: {
+  ORIGIN?: {
     fetch(request: Request): Promise<Response>;
   };
   AGENT_SESSIONS?: AgentSessionNamespace;
@@ -417,7 +417,14 @@ function forwardToOrigin(request: Request, env: Env): Promise<Response> | Respon
       },
     });
   }
-  return env.ORIGIN.fetch(request);
+  if (env.ORIGIN) return env.ORIGIN.fetch(request);
+  // DNS-origin mode: a same-zone subrequest goes to the proxied origin server
+  // without re-invoking this Worker. Only the protected hostname may be forwarded.
+  const publicHostname = env.PUBLIC_SITE_HOSTNAME?.trim().toLowerCase();
+  if (!publicHostname || new URL(request.url).hostname.toLowerCase() !== publicHostname) {
+    return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
+  return fetch(request);
 }
 
 async function serveLure(

@@ -2,8 +2,11 @@ account_id                      = "REPLACE_WITH_32_HEX_ACCOUNT_ID"
 zone_id                         = "REPLACE_WITH_32_HEX_ZONE_ID"
 protected_hostname              = "protected.example.invalid"
 admin_hostname                  = "admin.example.invalid"
+# "dns": forward ordinary traffic to the server behind protected_hostname's proxied DNS record.
+# "worker": set origin_service_name to an existing Worker that already serves the app.
 create_staging_origin           = false
-origin_service_name             = "existing-origin-worker"
+origin_type                     = "dns"
+origin_service_name             = ""
 origin_service_environment      = "production"
 installation_id                 = "REPLACE_WITH_RANDOM_INSTALLATION_ID"
 bait_api_path                   = "/api/private/account"

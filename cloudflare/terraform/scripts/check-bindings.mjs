@@ -45,7 +45,7 @@ export function checkDeploymentBindings(wrangler, terraform) {
   const app = terraform.match(
     /resource\s+"cloudflare_workers_script"\s+"app"\s*\{([\s\S]*?)\n\}/,
   )?.[1] ?? "";
-  const appBindings = app.match(/\bbindings\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  const appBindings = app.match(/\bbindings\s*=\s*(?:concat\(\s*)?\[([\s\S]*?)\]/)?.[1] ?? "";
   if (!/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/.test(appBindings)) {
     errors.push("Terraform dashboard Worker must declare ASSETS in bindings with type assets (provider 5.28.1).");
   }

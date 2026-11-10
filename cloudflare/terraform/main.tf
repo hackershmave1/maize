@@ -215,17 +215,17 @@ resource "cloudflare_workers_script" "app" {
     new_tag            = "v1"
     new_sqlite_classes = ["AgentSession"]
   }
-  bindings = [
+  bindings = concat([
     {
       name = "ASSETS"
       type = "assets"
     },
-    {
+    ], [for binding in [{
       name        = "ORIGIN"
       type        = "service"
       service     = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name
       environment = var.create_staging_origin ? "production" : var.origin_service_environment
-    },
+    }] : binding if var.origin_type != "dns"], [
     {
       name       = "AGENT_SESSIONS"
       type       = "durable_object_namespace"
@@ -301,7 +301,7 @@ resource "cloudflare_workers_script" "app" {
       type = "plain_text"
       text = cloudflare_zero_trust_access_application.admin.aud
     },
-  ]
+  ])
 
   depends_on = [
     terraform_data.deployment_preflight,
@@ -310,7 +310,7 @@ resource "cloudflare_workers_script" "app" {
 
   lifecycle {
     precondition {
-      condition     = (var.create_staging_origin ? local.staging_origin_worker_name : var.origin_service_name) != var.worker_name
+      condition     = var.origin_type == "dns" || (var.create_staging_origin ? local.staging_origin_worker_name : var.origin_service_name) != var.worker_name
       error_message = "The ORIGIN service binding must not route this Worker back to itself."
     }
   }
