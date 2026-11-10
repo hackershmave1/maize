@@ -15,6 +15,15 @@ data/
 web/node_modules/
 web/dist/
 web/.vite/
+cloudflare/node_modules/
+cloudflare/.wrangler-out/
+cloudflare/.dev.vars*
+cloudflare/terraform/.tools/
+cloudflare/terraform/.terraform/
+cloudflare/terraform/*.tfstate*
+cloudflare/terraform/*.tfvars
+cloudflare/terraform/*.auto.tfvars
+cloudflare/terraform/*.tfplan
 
 # Environment
 .env
@@ -29,3 +38,6 @@ build/
 # Static bundles generated at runtime + compiled agent binaries
 bundles/
 moqesh/agent/dist/
+
+# Git worktrees
+.worktrees/

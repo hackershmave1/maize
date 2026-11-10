@@ -1,0 +1,22 @@
+{
+  "name": "@moqesh/cloudflare",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "dashboard"
+  ],
+  "scripts": {
+    "test": "vitest",
+    "test:deployment": "node --test terraform/test/*.node.mjs",
+    "check:bindings": "node terraform/scripts/check-bindings.mjs",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspace dashboard",
+    "build": "npm run build --workspace dashboard && wrangler deploy --dry-run --outdir .wrangler-out",
+    "test:staging-origin": "node --test test/staging-origin.node.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.6.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.158.0"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "moqesh-cloudflare",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-08",
+  "vars": {
+    "INSTALLATION_ID": "local-development",
+    "MAZE_RESPONSE_BUDGET": "100",
+    "ALLOWLISTED_SOURCES": "",
+    "ALERT_DIRECT_LURE": "false",
+    "ALERT_CONFIRMATION": "true",
+    "BAIT_API_PATH": "/api/private/account",
+    "ADMIN_HOSTNAME": "admin.example.invalid",
+    "ADMIN_ROUTE": "admin.example.invalid/*",
+    "PUBLIC_SITE_HOSTNAME": "site.example.invalid",
+    "PUBLIC_ROUTE": "site.example.invalid/*",
+    "ACCESS_TEAM_DOMAIN": "team.example.invalid",
+    "ACCESS_AUD": "local-development-audience"
+  },
+  "assets": {
+    "directory": "./dashboard/dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "services": [
+    {
+      "binding": "ORIGIN",
+      "service": "moqesh-origin"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AGENT_SESSIONS",
+        "class_name": "AgentSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentSession"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "EVENTS_DB",
+      "database_name": "moqesh-events",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}

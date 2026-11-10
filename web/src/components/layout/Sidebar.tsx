@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, List, Users, Shield, Bell, SlidersHorizontal, Hexagon, Flame, Swords, Ban, Radar, LogOut,
+  LayoutDashboard, List, Users, Bell, SlidersHorizontal, Hexagon, Flame, Swords, Ban, Radar, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../AuthGate';
 
