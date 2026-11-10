@@ -29,10 +29,10 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <a className="brand" href="#detections" aria-label="Moqesh Control Room home">
+        <a className="brand" href="#detections" aria-label="MAIZE Control Room home">
           <span className="brand-mark" aria-hidden="true">M</span>
           <span>
-            <strong>moqesh</strong>
+            <strong>MAIZE</strong>
             <small>CONTROL ROOM</small>
           </span>
         </a>

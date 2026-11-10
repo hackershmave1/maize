@@ -22,8 +22,8 @@ validation. The repository/project rename is deliberately outside this plan.
 - `README.md`, `LICENSE`, `NOTICE`, `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`.
 - `docs/DEPLOYMENT.md` and useful sanitized Cloudflare design/plan records.
 - `.github/workflows/cloudflare.yml` and both Cloudflare deployment prompts.
-- The current README logo, moved to a neutral documentation asset location
-  before deleting the legacy dashboard.
+- No legacy logo is retained: the MAIZE README no longer embeds the old
+  branded image, which can be removed with the unused dashboard.
 
 No existing Worker name, npm scope, database migration table, HMAC context,
 Durable Object identity or migration, secret binding, or ownership marker is
@@ -64,23 +64,10 @@ python3 -m unittest discover -s cloudflare/test -p demo_attack_test.py -v
 
 Expected: all pass; the build is dry-run only. Do not deploy.
 
-## Task 2: Preserve the logo and Python lint configuration
+## Task 2: Preserve Python lint configuration
 
-**Files:** Move `web/public/animal-pot-logo.jpg` to
-`docs/assets/animal-pot-logo.jpg`; modify `README.md`; create `ruff.toml`.
-
-- [ ] Move the existing asset, without generating new imagery:
-
-```sh
-mkdir -p docs/assets
-git mv web/public/animal-pot-logo.jpg docs/assets/animal-pot-logo.jpg
-```
-
-- [ ] Replace the README image with:
-
-```html
-<img src="docs/assets/animal-pot-logo.jpg" alt="Animal Pot logo" width="220">
-```
+**Files:** Create `ruff.toml`. The old logo remains only in the unused legacy
+dashboard until Task 3 removes that directory; do not migrate it as MAIZE artwork.
 
 - [ ] Preserve the lint settings currently provided by Python packaging in
   a standalone `ruff.toml`, so deleting packaging does not silently change CI:
@@ -103,7 +90,7 @@ The FastAPI-specific `B008` exception is no longer needed for the stdlib demo.
 **Removal inventory:**
 
 - `moqesh/`: Python honeypot/API, world generation, agents and log shippers.
-- `web/`: legacy SPA and remaining old assets, after Task 2.
+- `web/`: legacy SPA and old branded assets.
 - `tests/`: Python-server tests, not `cloudflare/test/`.
 - `deploy/`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`.
 - `.env.example`, `pyproject.toml`.
@@ -182,7 +169,7 @@ and the retained npm scopes are intentional, not stale paths.
 - [ ] Review the staged diff and confirm:
   - Every retained Cloudflare file still exists.
   - No current runtime import or documentation link points to removed code.
-  - The logo renders from the retained location.
+  - No README image refers to deleted legacy assets.
   - License and attribution remain unchanged.
   - No public deployment-specific identifiers were introduced.
   - No live resources, DNS, routes, or GitHub settings were changed.
@@ -191,8 +178,8 @@ and the retained npm scopes are intentional, not stale paths.
 
 ## Deferred decisions
 
-Repository/project naming and logo replacement need a chosen name and separate
-approval. Old public commits, branches, tags, releases, and cached copies may
+The project name is now MAIZE; new logo artwork remains a separate decision.
+Old public commits, branches, tags, releases, and cached copies may
 still contain removed identifiers or legacy code; this plan does not rewrite
 history or claim to erase prior exposure.
 

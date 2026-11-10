@@ -1,25 +1,25 @@
-# Animal Pot
+# MAIZE
 
 **The best defense is a good offense.**
 
-<img src="web/public/animal-pot-logo.jpg" alt="Animal Pot logo" width="220">
-
 **An edge honeypot for automated attackers, running on Cloudflare Workers.**
 
-Animal Pot sits in front of a real website as a Cloudflare Worker. Ordinary
+MAIZE sits in front of a real website as a Cloudflare Worker. Ordinary
 visitors reach the site as normal. A scanner, bot, or AI agent that goes
 looking for secrets finds planted fake credentials. If it uses them, it is
 pulled into a chain of fake API data, kept away from the real site, and then
 blocked. An Access-protected dashboard shows every detection and lets an
 operator release a blocked source.
 
-Animal Pot is a fork of [juliourena/moqesh](https://github.com/juliourena/moqesh),
+MAIZE is a fork of [juliourena/moqesh](https://github.com/juliourena/moqesh),
 rebuilt for Cloudflare's edge. Its Cloudflare deployment does not use the
 upstream Python server, remote sensors, or Docker images. Legacy code and
 Docker/agent release automation remain in this repository pending the
 Cloudflare-only cleanup; they are not part of the Worker deployment.
 Internal names (the `moqesh` Worker, the
 `MOQESH_` prefixes) are kept from the upstream code.
+Existing installation resource names do not need to change when adopting the
+MAIZE branding.
 
 **Documentation:** [Cloudflare Worker, deployment, and demo](cloudflare/README.md)
 · [staging acceptance evidence](cloudflare/test/staging-acceptance.md)
@@ -29,7 +29,7 @@ Internal names (the `moqesh` Worker, the
 
 ```mermaid
 flowchart LR
-    V[Visitor] --> W[Animal Pot Worker]
+    V[Visitor] --> W[MAIZE Worker]
     W -->|uncontained, normal path| O[Real site / origin]
     W -->|lure path| L[Fake .env, config.json, .git/config ...]
     L -->|attacker reuses the fake key| H1[Rabbit hole: hop 1]
@@ -69,7 +69,7 @@ sources.
 
 | Component | Cloudflare service | Role |
 |---|---|---|
-| Animal Pot Worker | Workers (whole-host route) | Lures, bait API, rabbit hole, maze, block, pass-through to the origin |
+| MAIZE Worker | Workers (whole-host route) | Lures, bait API, rabbit hole, maze, block, pass-through to the origin |
 | Per-source state | Durable Objects (`AgentSession`) | Containment state and chain depth for each source IP |
 | Event store | D1 | Detections, settings, allowlist, audit log, containment index |
 | Dashboard | Workers static assets + Cloudflare Access | Operator UI and `/api/admin/*`, served only on the admin hostname |
@@ -91,7 +91,7 @@ docs/superpowers/    design specs and implementation plans
 ```
 
 The remaining top-level code (`moqesh/`, `web/`, `tests/`, `deploy/`, the
-`Dockerfile`) is inherited from upstream. Animal Pot's deployment does not
+`Dockerfile`) is inherited from upstream. MAIZE's deployment does not
 use it.
 
 ## Quick start
@@ -129,7 +129,7 @@ guide that covers accounts, the API token, HCP Terraform, DNS, Zero Trust,
 the two-stage rollout, verification, operations, troubleshooting, and an
 optional AI-assisted path using the Cloudflare MCP server.
 
-Animal Pot can sit in front of any site whose hostname is a proxied DNS record
+MAIZE can sit in front of any site whose hostname is a proxied DNS record
 on Cloudflare (`origin_type = "dns"`), or in front of an existing Cloudflare
 Worker (`origin_type = "worker"`).
 

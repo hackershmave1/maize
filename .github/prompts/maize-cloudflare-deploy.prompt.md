@@ -1,9 +1,9 @@
 ---
 mode: agent
-description: Deploy and verify an Animal Pot Cloudflare installation through a reviewed Terraform plan.
+description: Deploy and verify an MAIZE Cloudflare installation through a reviewed Terraform plan.
 ---
 
-# Animal Pot Cloudflare deployment
+# MAIZE Cloudflare deployment
 
 Guide one customer-owned deployment using the checked-in Terraform module in
 `cloudflare/terraform`. Treat Cloudflare MCP as **read-only discovery and

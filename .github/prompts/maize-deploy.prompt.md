@@ -1,11 +1,11 @@
 ---
 mode: agent
-description: Deploy Animal Pot in front of an existing site on the user's own Cloudflare account, through reviewed Terraform plans.
+description: Deploy MAIZE in front of an existing site on the user's own Cloudflare account, through reviewed Terraform plans.
 ---
 
-# Animal Pot deployment (generic)
+# MAIZE deployment (generic)
 
-Follow [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) to deploy one Animal Pot
+Follow [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) to deploy one MAIZE
 installation with the Terraform module in `cloudflare/terraform`. Use that
 guide's section letters when you report progress.
 
@@ -42,7 +42,7 @@ guide's section letters when you report progress.
    IDs; both hostnames exist in the zone as **proxied** records; no Worker
    route for exactly either hostname owned by another Worker and no
    path-specific wildcard route covering them; for `worker` mode, the origin
-   Worker exists and is not the Animal Pot Worker. Stop and report any
+   Worker exists and is not the MAIZE Worker. Stop and report any
    conflict.
 3. **Explain whole-host impact** and get confirmation: once the public route is
    attached, every request to the protected hostname runs through the Worker;
@@ -58,7 +58,7 @@ guide's section letters when you report progress.
    Confirm the user set Execution Mode **Local** on the HCP Terraform workspace
    and exported the environment variables, then run `terraform init -input=false`.
 6. **Bootstrap plan** (guide J): plan to `bootstrap.tfplan`, present it, and
-   confirm it creates only Animal Pot resources and no route for the protected
+   confirm it creates only MAIZE resources and no route for the protected
    hostname. **Wait for approval**, then `terraform apply bootstrap.tfplan`.
    Require `terraform output d1_migrations_verified` and
    `terraform output worker_secret_bindings_verified` to be `true`. Ask the

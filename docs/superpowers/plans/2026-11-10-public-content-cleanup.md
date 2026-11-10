@@ -86,7 +86,7 @@ Expected: remaining public-content failures identify documentation not yet clean
 ## Task 3: Documentation and unwanted artifact removal
 
 **Files:** Modify `README.md`, `docs/DEPLOYMENT.md`, `cloudflare/README.md`,
-`.github/prompts/animalpot-cloudflare-deploy.prompt.md`,
+`.github/prompts/maize-cloudflare-deploy.prompt.md`,
 `cloudflare/test/staging-acceptance.md`, the rabbit-hole implementation plan,
 and the Cloudflare context-handoff and webhook-alert design records.
 Rename the customer-specific staging runner spec to

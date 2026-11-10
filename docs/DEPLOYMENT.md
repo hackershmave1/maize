@@ -1,12 +1,12 @@
-# Deploying Animal Pot in front of your app
+# Deploying MAIZE in front of your app
 
 **The best defense is a good offense.**
 
 Here, offense means defensive deception on infrastructure you are authorized
 to protect, not attacking anyone else's systems.
 
-This guide takes you from zero to a working Animal Pot installation on your own
-Cloudflare account. Animal Pot runs as a Cloudflare Worker in front of an
+This guide takes you from zero to a working MAIZE installation on your own
+Cloudflare account. MAIZE runs as a Cloudflare Worker in front of an
 existing website: ordinary visitors reach your site unchanged, while scanners
 that probe for secrets get fake credentials, are pulled through a 10-hop
 "rabbit hole" of fake API data, and are then blocked from the real site. An
@@ -18,11 +18,11 @@ Everything below uses placeholder names. Replace them with your own:
 | Placeholder | Meaning |
 |---|---|
 | `example.com` | Your domain (a Cloudflare zone) |
-| `app.example.com` | The **protected hostname**: the existing site Animal Pot sits in front of |
+| `app.example.com` | The **protected hostname**: the existing site MAIZE sits in front of |
 | `admin.example.com` | The **admin hostname**: the private operator dashboard |
 | `you@example.com` | Operator email(s) allowed into the dashboard |
 | `your-team` | Your Cloudflare Zero Trust team name |
-| `your-org` / `animalpot-prod` | Your HCP Terraform organization / workspace |
+| `your-org` / `maize-prod` | Your HCP Terraform organization / workspace |
 
 Deployment is done with the Terraform module in
 [`cloudflare/terraform`](../cloudflare/terraform). For the full technical
@@ -64,8 +64,8 @@ going live; traffic to your real site counts as Worker requests too.
 ## B. Get the code and check it builds
 
 ```sh
-git clone https://github.com/hackershmave1/moqesh.git animalpot
-cd animalpot/cloudflare
+git clone https://github.com/hackershmave1/maize.git maize
+cd maize/cloudflare
 npm ci
 npm test -- --run
 npm run test:deployment
@@ -88,7 +88,7 @@ In the [Cloudflare dashboard](https://dash.cloudflare.com), open your domain.
 On the **Overview** page, the right-hand **API** panel shows the **Zone ID** and
 **Account ID** (both 32 hex characters). Copy both.
 
-### C2. Choose how Animal Pot reaches your site (`origin_type`)
+### C2. Choose how MAIZE reaches your site (`origin_type`)
 
 | Your site is… | Use | What to set |
 |---|---|---|
@@ -96,7 +96,7 @@ On the **Overview** page, the right-hand **API** panel shows the **Zone ID** and
 | Itself a Cloudflare Worker | **`worker`** | `origin_type = "worker"`, `origin_service_name = "<that Worker's name>"` |
 
 In `dns` mode, ordinary traffic is passed through to whatever your
-protected hostname's DNS record points to. Animal Pot only forwards requests
+protected hostname's DNS record points to. MAIZE only forwards requests
 whose hostname is exactly your protected hostname, so it cannot be used as an
 open proxy.
 
@@ -118,7 +118,7 @@ and confirm the site still works before continuing.
 In **Workers Routes** for the zone, look for routes matching either hostname.
 Terraform stops if another Worker already owns a route for exactly
 `app.example.com/*` or `admin.example.com/*`, or a path-specific wildcard
-route covers them. A zone-wide `*.example.com/*` route is fine; Animal Pot's
+route covers them. A zone-wide `*.example.com/*` route is fine; MAIZE's
 more specific routes take precedence for its two hostnames.
 
 ### C5. Check WAF rules for lure paths
@@ -177,8 +177,8 @@ store it in a password manager or secret store; it is shown only once. Do
    (for example `your-org`). Use the organization **name** later, not the
    `org-…` ID.
 2. Create a **workspace** with the **CLI-driven workflow**. Name it after the
-   installation, for example `animalpot-prod` (and a separate
-   `animalpot-staging` for practice). One workspace per installation; never
+   installation, for example `maize-prod` (and a separate
+   `maize-staging` for practice). One workspace per installation; never
    share one between installations.
 3. In the workspace **Settings → General**, set **Execution Mode** to
    **Local**. This is required: Terraform must read your local build and run
@@ -247,7 +247,7 @@ committed; a password-manager CLI or `read -s` is ideal):
 
 ```sh
 export TF_CLOUD_ORGANIZATION=your-org
-export TF_WORKSPACE=animalpot-prod
+export TF_WORKSPACE=maize-prod
 read -rs TF_TOKEN_app_terraform_io && export TF_TOKEN_app_terraform_io
 read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
 read -rs MOQESH_LURE_KEY_SECRET && export MOQESH_LURE_KEY_SECRET
@@ -276,7 +276,7 @@ terraform plan -var-file=terraform.tfvars -out=bootstrap.tfplan
 terraform show -no-color bootstrap.tfplan | less
 ```
 
-Review the plan. It should only **create** Animal Pot resources: no DNS, no
+Review the plan. It should only **create** MAIZE resources: no DNS, no
 deletion or replacement of anything you already had, and no route for
 `app.example.com`. Then apply exactly that plan (never use `-auto-approve`):
 
@@ -315,7 +315,7 @@ updates). Apply it:
 terraform apply route.tfplan
 ```
 
-From now on, every request to `app.example.com` passes through Animal Pot.
+From now on, every request to `app.example.com` passes through MAIZE.
 Normal visitors are forwarded to your site without being logged.
 
 ---
@@ -431,8 +431,8 @@ npx skills add cloudflare/skills
 ### O3. Run the deployment prompt
 
 This repository ships a generic prompt,
-[`.github/prompts/animalpot-deploy.prompt.md`](../.github/prompts/animalpot-deploy.prompt.md).
-In VS Code Copilot Chat (agent mode), type `/animalpot-deploy`. In other agents,
+[`.github/prompts/maize-deploy.prompt.md`](../.github/prompts/maize-deploy.prompt.md).
+In VS Code Copilot Chat (agent mode), type `/maize-deploy`. In other agents,
 paste the file's contents. The prompt walks through sections C to L, stops for
 your approval before every apply, and never prints or stores secrets. You
 still create the API token, HCP Terraform token, and secrets yourself

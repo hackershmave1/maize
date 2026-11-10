@@ -23,7 +23,7 @@ contributors working in the Moqesh repository.
 - Keep the original AnimalPot files unchanged as the source copies.
 - Keep `cloudflare/README.md` authoritative for customer setup, Terraform
   operations, credentials, approvals, rollback, and uninstall.
-- Keep `.github/prompts/animalpot-cloudflare-deploy.prompt.md` authoritative
+- Keep `.github/prompts/maize-cloudflare-deploy.prompt.md` authoritative
   for the deployment agent's discovery and approval workflow.
 - Add `.github/copilot-instructions.md` as a concise repository handoff. It
   points to the design, plan, README, and deployment prompt, states that the
