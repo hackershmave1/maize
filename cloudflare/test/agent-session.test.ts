@@ -288,3 +288,19 @@ it("reads stored state from before chain depth existed as depth 0", async () => 
   await expect(session.getMode()).resolves.toMatchObject({ mode: "maze", chainDepth: 0 });
   await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({ accepted: false });
 });
+
+it("re-confirming a legacy maze session raises depth to 1 without moving its timers", async () => {
+  const storage = new MemoryStorage();
+  const legacy = {
+    confirmedAt: 0,
+    mazeUntil: mazeDuration,
+    blockUntil: mazeDuration + blockDuration,
+    mazeRequests: 3,
+    throttledRequests: 0,
+  };
+  await storage.put("session", legacy);
+  const session = new AgentSessionState(storage, () => 1);
+
+  await expect(session.confirmKeyReuse()).resolves.toMatchObject({ ...legacy, mode: "maze", chainDepth: 1 });
+  await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({ accepted: true });
+});

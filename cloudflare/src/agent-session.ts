@@ -63,7 +63,8 @@ export class AgentSessionState {
           throttledRequests: 0,
           chainDepth: 1,
         }
-        : current;
+        // Sessions confirmed before the chain existed start it from hop 1.
+        : { ...current, chainDepth: Math.max(current.chainDepth, 1) };
       await storage.put(SESSION_KEY, state);
       return snapshotSessionState(state, currentTime);
     });

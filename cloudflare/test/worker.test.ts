@@ -708,7 +708,7 @@ it("does not serve chain hops to ordinary sources", async () => {
 });
 
 it("re-serves hop 1 to a contained source that reuses the key again", async () => {
-  const { env, origin } = createEnv(createSession("maze"));
+  const { env, origin, session } = createEnv(createSession("maze"));
   const lure = await worker.fetch(new Request("https://site.test/.env"), env);
   const key = (await lure.text()).match(/^API_KEY=(.+)$/m)![1];
   const response = await worker.fetch(hopRequest(baitApiPath, key), env);
@@ -716,4 +716,5 @@ it("re-serves hop 1 to a contained source that reuses the key again", async () =
   expect(((await response.json()) as { next: { endpoint: string } }).next.endpoint)
     .toBe(`https://site.test${CHAIN_HOPS[0].path}`);
   expect(origin.fetch).not.toHaveBeenCalled();
+  expect(session.confirmKeyReuse).toHaveBeenCalledOnce();
 });

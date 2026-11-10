@@ -166,6 +166,16 @@ export default {
           allowlisted: false,
           enabled: currentSettings.luresEnabled,
         });
+        if (result.event.confirmed) {
+          try {
+            await session.confirmKeyReuse(
+              currentSettings.mazeDurationMinutes * 60_000,
+              currentSettings.blockDurationHours * 60 * 60_000,
+            );
+          } catch {
+            reportStateError();
+          }
+        }
         await persistLureResult(result, env, context, currentSettings);
         if (result.event.confirmed) return result.response;
       }
