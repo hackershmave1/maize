@@ -259,6 +259,55 @@ class DemoTests(unittest.TestCase):
         run.assert_not_called()
         self.assertIn("interactive terminal", stderr.getvalue())
 
+    def test_command_line_targets_a_custom_deployment(self):
+        self.addCleanup(setattr, demo, "BASE_URL", demo.BASE_URL)
+        self.addCleanup(setattr, demo, "ADMIN_URL", demo.ADMIN_URL)
+        seen = {}
+
+        def capture(**_):
+            seen["base"], seen["admin"] = demo.BASE_URL, demo.ADMIN_URL
+
+        with (
+            patch.object(demo.sys.stdin, "isatty", return_value=True),
+            patch.object(demo, "run_demo", side_effect=capture),
+        ):
+            code = demo.main(["--base-url", "https://App.Example.com/", "--admin-url", "https://admin.example.com"])
+        self.assertEqual(code, 0)
+        self.assertEqual(seen, {"base": "https://app.example.com", "admin": "https://admin.example.com"})
+
+    def test_command_line_rejects_unsafe_target_urls_without_requests(self):
+        bad_urls = [
+            "http://app.example.com",
+            "https://app.example.com/path",
+            "https://user@app.example.com",
+            "https://app.example.com?x=1",
+            "https://app.example.com:8443",
+            "app.example.com",
+        ]
+        for url in bad_urls:
+            with (
+                self.subTest(url=url),
+                patch.object(demo.sys.stdin, "isatty", return_value=True),
+                patch.object(demo, "run_demo") as run,
+                patch.object(demo.sys, "stderr", new_callable=io.StringIO),
+                self.assertRaises(SystemExit) as raised,
+            ):
+                demo.main(["--base-url", url])
+            self.assertEqual(raised.exception.code, 2)
+            run.assert_not_called()
+
+    def test_request_preview_host_matches_the_target(self):
+        with (
+            patch.object(demo, "BASE_URL", "https://app.example.com"),
+            patch.object(demo, "ADMIN_URL", "https://admin.example.com"),
+        ):
+            lines = []
+            request = Mock(side_effect=responses())
+            demo.run_demo(input_fn=lambda _: "NEXT", output=lines.append, request_fn=request)
+        text = "\n".join(lines)
+        self.assertIn("Host: app.example.com", text)
+        self.assertNotIn("kurocyber", text)
+
     def test_chain_refuses_leads_outside_the_fixed_staging_chain(self):
         bad_leads = [
             {"endpoint": "https://example.invalid" + demo.HOP_PATHS[1], "authorization": TOKEN},

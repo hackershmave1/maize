@@ -9,6 +9,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 BASE_URL = "https://staging.kurocyber.com"
@@ -210,7 +211,7 @@ def run_demo(
         output(f"\n{'=' * 68}\nSTAGE {number}/8: {title}\nExpected: {expected}")
         if manual:
             output(manual)
-        output(f"\n--- REQUEST PREVIEW ---\nGET {BASE_URL}{path}\nHost: staging.kurocyber.com")
+        output(f"\n--- REQUEST PREVIEW ---\nGET {BASE_URL}{path}\nHost: {urlsplit(BASE_URL).hostname}")
         for name, value in headers.items():
             output(f"{name}: {value}")
         output("Request body: (none)")
@@ -348,15 +349,42 @@ def run_demo(
     )
 
 
+def https_origin(value: str) -> str:
+    parts = urlsplit(value.strip())
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    if (
+        parts.scheme != "https"
+        or not parts.hostname
+        or parts.username is not None
+        or port is not None
+        or parts.path not in ("", "/")
+        or parts.query
+        or parts.fragment
+    ):
+        raise argparse.ArgumentTypeError("must be an https:// origin with no path, port, credentials, or query")
+    return f"https://{parts.hostname.lower()}"
+
+
 def main(argv: list[str] | None = None) -> int:
+    global BASE_URL, ADMIN_URL
     parser = argparse.ArgumentParser(
         description=__doc__,
         epilog=(
-            "Fixed staging target only. Every request needs NEXT; QUIT exits. "
+            "Every request needs NEXT; QUIT exits. "
             "Requires an interactive terminal and Python 3.11+. No extra packages."
         ),
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--base-url", type=https_origin, default=BASE_URL, help="Protected hostname origin (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--admin-url", type=https_origin, default=ADMIN_URL, help="Admin dashboard origin (default: %(default)s)"
+    )
+    args = parser.parse_args(argv)
+    BASE_URL, ADMIN_URL = args.base_url, args.admin_url
     if not sys.stdin.isatty():
         print("ERROR: run in an interactive terminal; unattended/piped approval is not supported.", file=sys.stderr)
         return 2

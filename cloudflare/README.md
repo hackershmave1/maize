@@ -6,7 +6,8 @@ The public Worker route is **whole-host**, not lure-path-only: after the
 staging or production route is explicitly enabled, Cloudflare invokes the
 Worker for every request to the selected protected hostname. For an
 allowlisted or otherwise uncontained source, an ordinary non-lure request is
-forwarded to the selected `ORIGIN` service; it is not sent into the decoy maze
+forwarded to the selected `ORIGIN` service (or, with `origin_type = "dns"`,
+to the server behind the protected hostname's DNS record); it is not sent into the decoy maze
 and is not written to event history. This pass-through still incurs Worker
 execution; non-allowlisted sources with a usable IP also incur a per-source
 state check. The disclosure lures (`/.env`, `/.env.production`, `/.git/config`, `/.aws/credentials`, `/config.json`, `/wp-config.php.bak`, `/backup.sql`, `/api/v1/keys`, and `/swagger.json`) and `BAIT_API_PATH` are always
@@ -111,11 +112,17 @@ From the repository root, run the dependency-free Python 3.11+ walkthrough:
 
 ```sh
 python3 cloudflare/scripts/demo_attack.py
+# or, for your own deployment:
+python3 cloudflare/scripts/demo_attack.py \
+  --base-url https://app.example.com --admin-url https://admin.example.com
 ```
 
-Keep `https://admin-staging.kurocyber.com` open and sign in before starting.
-The script targets **only** `https://staging.kurocyber.com`; it cannot be pointed
-at the production website. Each of eight stages shows the request URL, headers,
+Keep the admin dashboard (by default `https://admin-staging.kurocyber.com`) open
+and sign in before starting. The script targets only the one `--base-url` origin
+(default `https://staging.kurocyber.com`), accepts only bare `https://` origins,
+and requests only the fixed demo paths. Point it at a staging hostname, not a
+production site you cannot afford to have your IP blocked on. Each of eight
+stages shows the request URL, headers,
 empty request body, expected result, HTTP status, selected response headers,
 and response body. Long responses are explicitly truncated. Type uppercase
 `NEXT` to authorize each individual request; `QUIT`, Ctrl-C, or EOF stops.
@@ -183,8 +190,22 @@ Object migration, the Moqesh D1 database and migrations, the dashboard Access
 application/policy, the Worker `workers.dev` setting, and the two explicitly
 named Worker routes.
 It does **not** create or edit DNS records, change unrelated routes, or create,
-replace, or delete an external `ORIGIN` Worker service. In the normal
-deployment mode, `origin_service_name` must refer to that existing service.
+replace, or delete an external origin.
+
+Choose how ordinary traffic reaches the real site with `origin_type`:
+
+- `origin_type = "dns"` (recommended for most sites): leave
+  `origin_service_name = ""`. No `ORIGIN` binding is created; the Worker
+  forwards ordinary requests with `fetch(request)`, which Cloudflare sends to
+  the server behind the protected hostname's proxied DNS record without
+  re-invoking the Worker. It forwards only requests whose hostname equals
+  `protected_hostname` and returns `404` otherwise, so it is not an open
+  proxy. The admin hostname never forwards.
+- `origin_type = "worker"` (the default): `origin_service_name` must refer to an
+  existing Worker service that serves the site; it is bound as `ORIGIN`.
+
+`create_staging_origin = true` cannot be combined with `origin_type = "dns"`.
+For a step-by-step installation, see [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md).
 The explicitly opted-in Kurocyber staging mode instead creates a private,
 Terraform-managed static origin and binds the Moqesh Worker to it.
 
@@ -263,9 +284,11 @@ consent.
 - An active Cloudflare account and zone, with both `protected_hostname` and
   `admin_hostname` already present in DNS and proxied through Cloudflare.
   Terraform reads and verifies these records but never manages them.
-- When `create_staging_origin = false` (the normal mode), an existing origin
-  Worker service and environment that can serve the protected hostname's
-  ordinary traffic. For the isolated Kurocyber staging runner, use
+- When `create_staging_origin = false` (the normal mode), either
+  `origin_type = "dns"` with the protected hostname's proxied DNS record
+  pointing at the real site, or `origin_type = "worker"` with an existing
+  origin Worker service and environment that can serve the protected
+  hostname's ordinary traffic. For the isolated Kurocyber staging runner, use
   `create_staging_origin = true` and the dedicated tfvars example above
   instead; Terraform creates the private static origin.
 - A configured Cloudflare Access team domain and the exact operator email

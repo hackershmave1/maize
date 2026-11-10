@@ -118,11 +118,21 @@ credentials and never deploys.
 
 ## Deploying
 
+**New here? Follow [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).** It is an A–Z
+guide that covers accounts, the API token, HCP Terraform, DNS, Zero Trust,
+the two-stage rollout, verification, operations, troubleshooting, and an
+optional AI-assisted path using the Cloudflare MCP server.
+
+Animal Pot can sit in front of any site whose hostname is a proxied DNS record
+on Cloudflare (`origin_type = "dns"`), or in front of an existing Cloudflare
+Worker (`origin_type = "worker"`).
+
 Deployment is Terraform-driven. The customer owns the Cloudflare account, the
 zone, the Terraform state, the API tokens, and the Worker secrets. Every apply
 is reviewed from a saved plan. Roll out to a dedicated staging hostname first.
-Production routing needs its own reviewed and approved plan. Full procedure,
-required token permissions, rollback, and uninstall:
+Production routing needs its own reviewed and approved plan. The detailed
+reference (traffic model, safety rules, required token permissions, rollback,
+and uninstall) is in
 [`cloudflare/README.md`](cloudflare/README.md#customer-owned-terraform-deployment).
 
 ## Demo
@@ -140,7 +150,9 @@ operator-approved stages:
 8. manual unblock and recovery
 
 The script shows every request and response. This is a live exercise: it
-contains the IP you run it from. See
+contains the IP you run it from. It targets the Kurocyber staging hostnames by
+default; pass `--base-url https://app.example.com --admin-url
+https://admin.example.com` for your own deployment. See
 [Guided attack demonstration](cloudflare/README.md#guided-attack-demonstration).
 
 ## Known limitations

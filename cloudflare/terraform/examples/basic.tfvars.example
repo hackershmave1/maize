@@ -23,4 +23,8 @@ access_session_duration         = "8h"
 lure_key_secret_binding_name    = "LURE_KEY_SECRET"
 alert_webhook_secret_binding_name = "ALERT_WEBHOOK_URL"
 secret_rotation_revision        = "initial"
+# Requires MOQESH_ALERT_WEBHOOK_URL at apply time. Set false to deploy without webhook alerts.
+alert_webhook_enabled           = true
+# Keep false for the first apply; set true after it succeeds (the Durable Object migration is then applied).
+agent_session_migration_applied = false
 enable_public_route             = false
