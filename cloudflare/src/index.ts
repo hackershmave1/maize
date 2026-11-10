@@ -502,7 +502,7 @@ async function persistEvent(
   input: {
     installationId: string | undefined;
     type: EventType;
-    route: LureRoute | null;
+    route: EventInput["route"];
     sourceIp: string | null;
     confirmed: boolean;
   },

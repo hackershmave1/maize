@@ -9,6 +9,7 @@ const REQUIRED_MIGRATIONS = [
   "0002_admin.sql",
   "0003_containment_sources.sql",
   "0004_more_lure_routes.sql",
+  "0005_rabbit_hole_events.sql",
 ];
 const MIGRATIONS_TABLE = "__moqesh_schema_migrations";
 
@@ -114,7 +115,7 @@ export async function applyD1Migrations({
     throw new Error("D1 runtime settings verification failed");
   }
 
-  console.log("Verified D1 migrations 0001 through 0004 and initialized runtime settings");
+  console.log("Verified D1 migrations 0001 through 0005 and initialized runtime settings");
 }
 
 async function d1Query({ accountId, databaseId, sql, params, token, fetcher }) {

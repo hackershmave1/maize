@@ -110,6 +110,7 @@ nodeTest("D1 migration runner applies and verifies all schema migrations against
     "0002_admin.sql",
     "0003_containment_sources.sql",
     "0004_more_lure_routes.sql",
+    "0005_rabbit_hole_events.sql",
   ]);
   assert.ok(requests.every(({ url }) =>
     url.endsWith("/d1/database/12345678-1234-1234-1234-123456789abc/query")));
@@ -314,4 +315,32 @@ nodeTest("migration 0004 preserves events and accepts exactly the Worker's lure 
   );
   for (const route of workerRoutes) insert.run(`event-${route}`, route);
   assert.throws(() => insert.run("unknown", "not-a-lure"), /CHECK constraint failed/);
+});
+
+nodeTest("migration 0005 preserves events and accepts rabbit-hole hop events", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(":memory:");
+  for (const name of ["0001_events.sql", "0002_admin.sql", "0003_containment_sources.sql", "0004_more_lure_routes.sql"]) {
+    database.exec(await readFile(new URL(`../../migrations/${name}`, import.meta.url), "utf8"));
+  }
+  database.prepare(
+    "INSERT INTO events (id, installation_id, type, route, source_ip, confirmed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run("existing", "install", "unconfirmed_lure_view", "config-json", "192.0.2.1", 0, 1);
+
+  database.exec(await readFile(new URL("../../migrations/0005_rabbit_hole_events.sql", import.meta.url), "utf8"));
+
+  assert.deepEqual(
+    { ...database.prepare("SELECT id, route FROM events").get() },
+    { id: "existing", route: "config-json" },
+  );
+  const indexes = database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'").all()
+    .map(({ name }) => name).filter((name) => !name.startsWith("sqlite_"));
+  assert.deepEqual(indexes.sort(), ["events_created_idx", "events_installation_created_idx"]);
+  const insert = database.prepare(
+    "INSERT INTO events (id, installation_id, type, route, source_ip, confirmed, created_at) VALUES (?, 'install', ?, ?, NULL, 1, 2)",
+  );
+  for (let hop = 2; hop <= 10; hop += 1) insert.run(`hop-${hop}`, "rabbit_hole_hop", `hop-${hop}`);
+  insert.run("still-lure", "confirmed_reuse", "bait-api");
+  assert.throws(() => insert.run("bad-route", "rabbit_hole_hop", "hop-11"), /CHECK constraint failed/);
+  assert.throws(() => insert.run("bad-type", "not_a_type", null), /CHECK constraint failed/);
 });

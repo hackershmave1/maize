@@ -17,6 +17,7 @@ import eventsSchema from "../migrations/0001_events.sql?raw";
 import adminSchema from "../migrations/0002_admin.sql?raw";
 import containmentSchema from "../migrations/0003_containment_sources.sql?raw";
 import lureRoutesSchema from "../migrations/0004_more_lure_routes.sql?raw";
+import rabbitHoleSchema from "../migrations/0005_rabbit_hole_events.sql?raw";
 
 const database = (cloudflareEnv as { EVENTS_DB: EventDatabase }).EVENTS_DB;
 const installationId = "admin-api-test";
@@ -40,7 +41,7 @@ const assertionKeys = await crypto.subtle.generateKey(
 const publicJwk = await crypto.subtle.exportKey("jwk", assertionKeys.publicKey);
 
 beforeAll(async () => {
-  for (const schema of [eventsSchema, adminSchema, containmentSchema, lureRoutesSchema]) {
+  for (const schema of [eventsSchema, adminSchema, containmentSchema, lureRoutesSchema, rabbitHoleSchema]) {
     for (const statement of schema.split(";").map((part) => part.trim()).filter(Boolean)) {
       await database.prepare(statement).run();
     }

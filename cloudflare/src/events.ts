@@ -1,16 +1,18 @@
 import type { LureRoute } from "./lures";
+import type { ChainRoute } from "./rabbit-hole";
 import { normalizeSourceIp } from "./session-state";
 
 export type EventType =
   | "unconfirmed_lure_view"
   | "invalid_key_attempt"
   | "confirmed_reuse"
+  | "rabbit_hole_hop"
   | "block";
 
 export interface EventInput {
   installationId: string;
   type: EventType;
-  route: LureRoute | null;
+  route: LureRoute | ChainRoute | null;
   sourceIp: string | null;
   confirmed: boolean;
 }
