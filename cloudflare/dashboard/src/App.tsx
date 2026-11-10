@@ -30,7 +30,7 @@ export default function App() {
     <div className="shell">
       <aside className="sidebar">
         <a className="brand" href="#detections" aria-label="MAIZE Control Room home">
-          <span className="brand-mark" aria-hidden="true">M</span>
+          <img className="brand-mark" src="/maize-logo.png" alt="" />
           <span>
             <strong>MAIZE</strong>
             <small>CONTROL ROOM</small>

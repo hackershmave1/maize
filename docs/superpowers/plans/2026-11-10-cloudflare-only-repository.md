@@ -22,8 +22,9 @@ validation. The repository/project rename is deliberately outside this plan.
 - `README.md`, `LICENSE`, `NOTICE`, `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`.
 - `docs/DEPLOYMENT.md` and useful sanitized Cloudflare design/plan records.
 - `.github/workflows/cloudflare.yml` and both Cloudflare deployment prompts.
-- No legacy logo is retained: the MAIZE README no longer embeds the old
-  branded image, which can be removed with the unused dashboard.
+- Retain `cloudflare/dashboard/public/maize-logo.png`, used by the README and
+  current dashboard. Its duplicate in `web/public/` is removed with the
+  unused legacy dashboard.
 
 No existing Worker name, npm scope, database migration table, HMAC context,
 Durable Object identity or migration, secret binding, or ownership marker is
@@ -66,8 +67,8 @@ Expected: all pass; the build is dry-run only. Do not deploy.
 
 ## Task 2: Preserve Python lint configuration
 
-**Files:** Create `ruff.toml`. The old logo remains only in the unused legacy
-dashboard until Task 3 removes that directory; do not migrate it as MAIZE artwork.
+**Files:** Create `ruff.toml`. The current MAIZE logo stays in the Cloudflare
+dashboard public assets; delete only the legacy duplicate with `web/`.
 
 - [ ] Preserve the lint settings currently provided by Python packaging in
   a standalone `ruff.toml`, so deleting packaging does not silently change CI:
@@ -90,7 +91,7 @@ The FastAPI-specific `B008` exception is no longer needed for the stdlib demo.
 **Removal inventory:**
 
 - `moqesh/`: Python honeypot/API, world generation, agents and log shippers.
-- `web/`: legacy SPA and old branded assets.
+- `web/`: legacy SPA and its duplicate logo asset.
 - `tests/`: Python-server tests, not `cloudflare/test/`.
 - `deploy/`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`.
 - `.env.example`, `pyproject.toml`.
@@ -178,7 +179,7 @@ and the retained npm scopes are intentional, not stale paths.
 
 ## Deferred decisions
 
-The project name is now MAIZE; new logo artwork remains a separate decision.
+The project name is MAIZE and its new labyrinth logo is implemented.
 Old public commits, branches, tags, releases, and cached copies may
 still contain removed identifiers or legacy code; this plan does not rewrite
 history or claim to erase prior exposure.

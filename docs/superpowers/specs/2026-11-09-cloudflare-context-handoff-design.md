@@ -16,11 +16,11 @@ contributors working in the Moqesh repository.
 
 ## Source of truth and locations
 
-- Copy the approved design from AnimalPot to
+- Copy the approved design from the original external project to
   `docs/superpowers/specs/2026-11-08-cloudflare-deployment-design.md`.
-- Copy the implementation plan from AnimalPot to
+- Copy the implementation plan from the original external project to
   `docs/superpowers/plans/2026-11-08-cloudflare-deployment.md`.
-- Keep the original AnimalPot files unchanged as the source copies.
+- Keep the original external project's files unchanged as the source copies.
 - Keep `cloudflare/README.md` authoritative for customer setup, Terraform
   operations, credentials, approvals, rollback, and uninstall.
 - Keep `.github/prompts/maize-cloudflare-deploy.prompt.md` authoritative
@@ -52,7 +52,7 @@ location is required.
 
 ## Non-goals
 
-- Do not move or delete the original AnimalPot documents.
+- Do not move or delete the original external project's documents.
 - Do not merge the feature branch or change the parent checkout.
 - Do not create customer-specific Terraform variables, credentials, or
   secrets.
@@ -69,4 +69,4 @@ location is required.
    staging/approval boundaries.
 4. The Cloudflare README links to the design, plan, and deployment prompt.
 5. Links resolve within the repository, no contradictory deployment guidance
-   is introduced, and the original AnimalPot files remain unchanged.
+   is introduced, and the original external project's files remain unchanged.

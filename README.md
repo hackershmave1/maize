@@ -1,5 +1,7 @@
 # MAIZE
 
+<img src="cloudflare/dashboard/public/maize-logo.png" alt="MAIZE labyrinth logo" width="220">
+
 **The best defense is a good offense.**
 
 **An edge honeypot for automated attackers, running on Cloudflare Workers.**

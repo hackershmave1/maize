@@ -25,9 +25,9 @@ remote without pushing commits or deploying.
   `CONTRIBUTING.md`, and `SECURITY.md` display names; preserve original author
   attribution and internal names.
 - [x] Remove the old README logo embed; no new artwork is requested.
-- [x] Rename `.github/prompts/animalpot-deploy.prompt.md` to
-  `.github/prompts/maize-deploy.prompt.md` and the corresponding
-  `animalpot-cloudflare-deploy.prompt.md` to `maize-cloudflare-deploy.prompt.md`.
+- [x] Rename the former deployment prompts to
+  `.github/prompts/maize-deploy.prompt.md` and
+  `.github/prompts/maize-cloudflare-deploy.prompt.md`.
   Update their content and all tracked links/command references.
 - [x] Update dashboard markup:
 

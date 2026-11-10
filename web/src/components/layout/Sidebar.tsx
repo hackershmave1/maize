@@ -22,8 +22,8 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-56 bg-surface border-r border-border flex flex-col z-30">
       <div className="h-14 flex items-center gap-2.5 px-4 border-b border-border">
-        <img src="/animal-pot-logo.svg" alt="Animal Pot logo" className="w-9 h-9 rounded-md object-cover" />
-        <span className="text-base font-semibold tracking-tight">Animal <span className="text-accent">Pot</span></span>
+        <img src="/maize-logo.png" alt="MAIZE logo" className="w-9 h-9 rounded-md object-contain" />
+        <span className="text-base font-semibold tracking-tight">M<span className="text-accent">AI</span>ZE</span>
       </div>
       <nav className="flex-1 py-3 px-3 space-y-0.5">
         {navItems.map(({ to, icon: Icon, label }) => (
