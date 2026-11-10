@@ -210,3 +210,18 @@ are not a production guarantee.
 - Reviewer and date: Copilot-assisted deployment and observed tests, 2026-11-10;
   operator reported admin sign-in.
 - Production readiness: NOT ESTABLISHED
+
+## Rabbit-hole chain (2026-11-10)
+
+- Commits `6846126`..`b2e5913` (local only): 10-hop chain, chain depth in the per-IP Durable Object, migration 0005, maze-mode hop serving, the 8-stage demo, docs, and a review fix so sources contained before the deploy can enter the chain from hop 1.
+- Local validation: 110 Worker tests, 39 deployment tests, 15 staging-origin tests, 20 demo tests; typecheck, binding check and build clean.
+- Plan `rabbit.tfplan`, SHA-256 `7e5e269c2dd84fb712be0ed62ae89470e322a454855f1ec3cb2f93d95c6650e7`, approved by the operator. Plan: 3 to add, 2 to change, 3 to destroy. Worker updated in place with no Durable Object migration; no route, DNS, Access, zone or production changes.
+- Apply: "Verified D1 migrations 0001 through 0005"; apply complete. The D1 ledger lists 0001–0005, the `events` table accepts `rabbit_hole_hop`, and the 22 existing events were preserved.
+- Live walk from the host IPv4 (`216.128.14.26`), script-driven:
+  - `/` returned 200 with the runner.
+  - `/config.json` returned 200 with the key, and reusing it at `/api/private/account` returned 200 hop 1 with a lead to `/api/private/billing`.
+  - `/` returned 404 `{"error":"Not found"}` while in the maze.
+  - Hops 2–10 (`/api/private/billing` … `/api/internal/vault/root`) each returned 200 fake data with the next lead; hop 10 had no lead.
+  - `/` returned 403 immediately after hop 10.
+- D1 events for that source: `unconfirmed_lure_view` (`config-json`), `confirmed_reuse` (`bait-api`), 9 `rabbit_hole_hop` (`hop-2` … `hop-10`), and `block`.
+- Pending: the operator confirms the hop events in Detections and unblocks `216.128.14.26` in Containment.
