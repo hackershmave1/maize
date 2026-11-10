@@ -1,9 +1,10 @@
 # Cloudflare Staging Acceptance Record
 
-> **Status: NOT RUN.** This is a report template, not staging evidence. No
-> Cloudflare resources have been provisioned or deployed. Complete only after
-> the approved staging applies and tests have actually run. Record failures and
-> skipped checks; do not infer staging success from local tests.
+> **Status: DEPLOYED; SMOKE TESTS PASSED; FULL ACCEPTANCE INCOMPLETE.**
+> Staging was deployed on 2026-11-10 through separately approved DNS,
+> bootstrap, recovery, and public-route changes. Observed results are recorded
+> below. Timed lifecycle, cross-source, authenticated admin API, and cost
+> acceptance remain incomplete; local tests are not staging evidence.
 
 ## Safety and evidence handling
 
@@ -14,41 +15,42 @@
   other customer-sensitive data.
 - For each acceptance step, label evidence as **local**, **staging**, or
   **not verified**. A local test is not a staging result.
-- Every result in this template starts as **NOT RUN**. Keep local game/test
-  evidence separate from staging evidence; never infer a staging result from a
-  local test or mark acceptance complete without actually observing staging.
+- Unperformed checks retain **NOT RUN**. Keep local game/test evidence separate
+  from staging evidence; never infer a staging result from a local test or mark
+  acceptance complete without actually observing staging.
 
 ## Deployment record
 
 | Item | Record |
 |---|---|
-| Feature commit/source revision | NOT RUN |
-| Staging target alias | `staging.kurocyber.com` — NOT RUN |
-| Staging protected/admin host aliases | `staging.kurocyber.com`; `admin-staging.kurocyber.com` — NOT RUN |
-| Generated static-origin Worker/service name (alias) | `moqesh-staging-origin-<16 hex>` — NOT RUN |
-| Existing external origin service/environment (normal deployments only) | NOT RUN |
-| HCP Terraform workspace/state per account + installation ID; sole-writer review | NOT RUN |
-| Cloudflare account/zone and proxied DNS preflight | NOT RUN |
-| DNS records | CNAME `staging` → `kurocyber.com`, proxied; CNAME `admin-staging` → `kurocyber.com`, proxied — NOT RUN |
-| Separate DNS-change approval (if records need creation) | NOT RUN |
-| Existing route inventory and ownership review | NOT RUN |
-| Route conflicts or ambiguity | NOT RUN |
-| Operator Access policy confirmed | NOT RUN |
+| Feature commit/source revision | `29f2494`, deployment fixes atop `5f4740e`; local branch `fix/hcp-cloud-initialization`, not pushed |
+| Staging target alias | `staging.kurocyber.com` — deployed |
+| Staging protected/admin host aliases | `staging.kurocyber.com`; `admin-staging.kurocyber.com` — deployed |
+| Generated static-origin Worker/service name (alias) | `moqesh-staging-origin-a98d88da538d4174` |
+| Existing external origin service/environment (normal deployments only) | Not used; private managed staging origin selected |
+| HCP Terraform workspace/state per account + installation ID; sole-writer review | `kurocyber/moqesh-kurocyber-staging`; local execution, auto-apply off; initially no state; resulting remote state serial 3 verified |
+| Cloudflare account/zone and proxied DNS preflight | PASS: authenticated discovery and Terraform preconditions |
+| DNS records | PASS: both approved proxied CNAMEs to `kurocyber.com` restored and read back |
+| Separate DNS-change approval (if records need creation) | Explicit approval in deployment conversation before restoration |
+| Existing route inventory and ownership review | Initially no zone Worker routes; finally only the two exact Moqesh staging routes |
+| Route conflicts or ambiguity | None found by current discovery and plan preconditions |
+| Operator Access policy confirmed | PASS: self-hosted admin Access application allows the approved email only; existing Cloudflare sign-in retained |
 
 ## Approval and route gates
 
 | Gate | Expected | Result / approval reference |
 |---|---|---|
-| Bootstrap plan (`enable_public_route = false`) reviewed | Moqesh resources plus private static-origin Worker/assets; no public site route, DNS, production, or wildcard changes | NOT RUN |
-| Bootstrap exact saved plan explicitly approved and applied | Approval is for the reviewed plan; no `-auto-approve` | NOT RUN |
-| D1 migrations/runtime settings verified | Migrations `0001`, `0002`, `0003`; outputs `d1_migrations_verified=true` | NOT RUN |
-| Required Worker secret binding names verified | `LURE_KEY_SECRET`; `ALERT_WEBHOOK_URL` is not required or verified when delivery is disabled (a previously provisioned secret is retained but unused); values not recorded | NOT RUN |
-| Access admin route verified | Exact staging admin hostname and approved operator policy | NOT RUN |
-| Static-origin hostname guard verified | Only `staging.kurocyber.com`; rejects `workers.dev` and unknown hosts | NOT RUN |
-| Staging route plan reviewed | Only `staging.kurocyber.com/*` enables whole-host routing | NOT RUN |
-| Staging route exact plan separately approved and applied | Production hostname remains untouched | NOT RUN |
-| Workers.dev and preview URLs disabled | No alternate public entry point | NOT RUN |
-| Scheduled trigger verified | `* * * * *` | NOT RUN |
+| Bootstrap plan (`enable_public_route = false`) reviewed | Moqesh resources plus private static-origin Worker/assets; no public site route, DNS, production, or wildcard changes | PASS: 12 creates, no updates/deletions |
+| Bootstrap exact saved plan explicitly approved and applied | Approval is for the reviewed plan; no `-auto-approve` | Approved SHA-256 `6b36bec16f12e6f489ffcdbb7d60c60a631d835d98b808c4a52fe4e19e7b1b5c`; initial apply stopped at migration confirmation before admin route creation |
+| Recovery exact saved plan explicitly approved and applied | Preserve created resources; resume migrations and then attach admin route | PASS: approved SHA-256 `65ccde17e731c712ee5f3cba58065ce226de82e9a5207d47f5dbb9f49226b008`; skipped committed migration 0001 and verified all migrations |
+| D1 migrations/runtime settings verified | Migrations `0001`, `0002`, `0003`; outputs `d1_migrations_verified=true` | PASS: live ledger/settings queries and remote state output |
+| Required Worker secret binding names verified | `LURE_KEY_SECRET`; `ALERT_WEBHOOK_URL` is not required or verified when delivery is disabled (a previously provisioned secret is retained but unused); values not recorded | PASS: API binding-name read-back; `worker_secret_bindings_verified=true`; supplied token and lure-secret values absent from pulled remote state |
+| Access admin route verified | Exact staging admin hostname and approved operator policy | PASS: anonymous document/API requests return 302 to the existing Access team |
+| Static-origin hostname guard verified | Only `staging.kurocyber.com` in deployed traffic; rejects `workers.dev` and unknown hosts | Deployed source matches tested guarded implementation; direct URLs disabled; live unknown-host invocation not performed |
+| Staging route plan reviewed | Only `staging.kurocyber.com/*` enables whole-host routing | PASS: public route create plus read-only ownership-helper replacement and D1 computed-metadata refresh |
+| Staging route exact plan separately approved and applied | Production hostname remains untouched | PASS: approved SHA-256 `7cd847c1d0881293d5fbd06ff5efc8e5d0906f3d91f8de0ef5108d1f40629ee8` |
+| Workers.dev and preview URLs disabled | No alternate public entry point | PASS: both Workers' subdomain API settings report `enabled=false`, `previews_enabled=false` |
+| Scheduled trigger verified | `* * * * *` | PASS: live schedule API read-back |
 
 ## Static-origin and game acceptance
 
@@ -59,14 +61,14 @@ does not establish that the staging site works.
 
 | Check | Expected result | Level | Result / evidence |
 |---|---|---|---|
-| Static-origin HTTP response | Successful game document/status recorded (expected HTTP 200); generated service name matches the approved account/installation identity | Local + staging | NOT RUN |
-| Staging page load | Original runner renders at `staging.kurocyber.com` without external assets or third-party requests | Staging | NOT RUN |
-| Game start and controls | Space, Arrow Up, and touch/tap start or control a run and trigger jumps | Local + staging | NOT RUN |
-| Collision and game-over | Obstacle collision ends the run and displays game-over state | Local + staging | NOT RUN |
-| Restart | Restart begins a fresh run and resets the current score | Local + staging | NOT RUN |
-| Best score | Best score persists in browser `localStorage` after reload in the same browser | Local + staging | NOT RUN |
-| Offline after initial load | After document/assets are loaded, gameplay continues without network access or external requests | Local + staging | NOT RUN |
-| Origin hostname guard | Missing/unknown host returns a closed response; `workers.dev` and preview entry points cannot serve the origin | Local tests + staging configuration check | NOT RUN |
+| Static-origin HTTP response | Successful game document/status recorded (expected HTTP 200); generated service name matches the approved account/installation identity | Local + staging | PASS: live public document 200, correct game title; ORIGIN binding matches state |
+| Staging page load | Original runner renders at `staging.kurocyber.com` without external assets or third-party requests | Staging | PASS: live browser render; all referenced document assets are same-origin and return 200 |
+| Game start and controls | Space, Arrow Up, and touch/tap start or control a run and trigger jumps | Local + staging | PARTIAL: live keyboard/click controls and reduced-motion scoring verified; real touch-device input not verified |
+| Collision and game-over | Obstacle collision ends the run and displays game-over state | Local + staging | PASS: live browser displayed collision/game-over |
+| Restart | Restart begins a fresh run and resets the current score | Local + staging | PASS: live browser restart returned score to zero |
+| Best score | Best score persists in browser `localStorage` after reload in the same browser | Local + staging | PASS: observed best score unchanged after reload |
+| Offline after initial load | After document/assets are loaded, gameplay continues without network access or external requests | Local + staging | PASS: browser context offline; reduced-motion Space advanced score; connectivity restored |
+| Origin hostname guard | Missing/unknown host returns a closed response; `workers.dev` and preview entry points cannot serve the origin | Local tests + staging configuration check | PASS for local guards and deployed-source/config checks; live unknown-host invocation not performed |
 
 ## Effective staging settings
 
@@ -75,15 +77,15 @@ that a particular setting was deployed.
 
 | Setting | Effective value |
 |---|---|
-| Lure paths (`/.env` and configured `BAIT_API_PATH`) | NOT RUN |
-| Maze duration | NOT RUN |
-| Block duration | NOT RUN |
-| Per-source response budget | NOT RUN |
-| Alert grouping interval | NOT RUN |
-| Event/audit retention | NOT RUN |
-| Allowlist | NOT RUN |
-| Direct-lure alert binding | Expected: `false` in current Terraform; observed staging value: NOT RUN |
-| Alert webhook enabled | Expected: `false` for isolated Kurocyber staging; observed staging value: NOT RUN |
+| Lure paths (`/.env` and configured `BAIT_API_PATH`) | `/.env`, `/api/private/account`; both requested live |
+| Maze duration | 15 minutes; live D1 settings |
+| Block duration | 24 hours; live D1 settings |
+| Per-source response budget | 100; live D1 settings and HTTP throttle test |
+| Alert grouping interval | 5 minutes configured; webhook delivery disabled |
+| Event/audit retention | 30 days; live D1 settings |
+| Allowlist | Empty in deployment configuration |
+| Direct-lure alert binding | `false` in deployed Worker configuration |
+| Alert webhook enabled | `false`, verified through live Worker settings API |
 
 For elapsed-time tests, use explicit staging-only durations within supported
 bounds and record them. The minimum maze duration is 1 minute and the minimum
@@ -94,25 +96,25 @@ block duration is 1 hour. A shortened staging run does not prove the
 
 | Check | Expected result | Level | Result / evidence |
 |---|---|---|---|
-| Ordinary uncontained request | Expected static-origin response and HTTP status; reaches origin through Moqesh; no event created | Staging | NOT RUN |
-| Configured `/.env` | Decoy at the same URL with synthetic key and configured bait API URL; origin not called | Staging | NOT RUN |
-| Invalid/missing bait API key | Unauthorized decoy; no confirmation or containment | Staging | NOT RUN |
-| Valid synthetic key from a different source | Confirmation persists, key is not stored, and containment starts; no webhook delivery in staging | Staging | NOT RUN |
+| Ordinary uncontained request | Expected static-origin response and HTTP status; reaches origin through Moqesh; no event created | Staging | PASS: game 200 before confirmation; initial event count zero |
+| Configured `/.env` | Decoy at the same URL with synthetic key and configured bait API URL; origin not called | Staging | PASS: 200, synthetic-key shape and no-store verified without recording key |
+| Invalid/missing bait API key | Unauthorized decoy; no confirmation or containment | Staging | PARTIAL: missing-key request returned 401; subsequent ordinary handling unaffected; separate malformed-key case not run live |
+| Valid synthetic key from a different source | Confirmation persists, key is not stored, and containment starts; no webhook delivery in staging | Staging | PARTIAL: same-source reuse returned synthetic success and persisted one confirmation; subsequent root received maze decoy; outbox count zero. Cross-source reuse not run |
 | Allowlisted ordinary source | Bypasses maze/block and reaches origin | Staging | NOT RUN |
 | Allowlisted direct lure | Event recorded; no direct-lure webhook alert with current `ALERT_DIRECT_LURE=false`; no containment | Staging | NOT RUN |
 | Allowlisted confirmed-key reuse with webhook disabled | Confirmation event is recorded; no webhook outbox entry or outbound request; allowlist still bypasses containment | Staging | NOT RUN |
-| Confirmed source during maze | Decoys on non-lure paths; origin not called; initial timer is not extended | Staging | NOT RUN |
-| Response budget | Throttles with bounded response; does not shorten maze or start block early | Staging | NOT RUN |
+| Confirmed source during maze | Decoys on non-lure paths; origin not called; initial timer is not extended | Staging | PARTIAL: root and unrelated path returned exact JSON maze decoy with 404, not runner HTML; timer non-extension not tested live |
+| Response budget | Throttles with bounded response; does not shorten maze or start block early | Staging | PARTIAL: 100-request configured budget reached 429 with bounded JSON and Retry-After 30; timed transition invariants remain local-only |
 | Maze expiry and block | Maze ends at configured time; block lasts configured duration | Staging, use recorded durations | NOT RUN |
 | Block expiry | Normal handling resumes after configured block expiry | Staging, use recorded durations | NOT RUN |
 | Manual unblock | Authorized operator clears source state; audit identifies actor/time/result | Staging | NOT RUN |
-| Webhook grouping/retry | Existing alert-enabled behavior is covered by local tests; skipped in Kurocyber staging while `alert_webhook_enabled=false` | Local tests; staging skipped | NOT RUN |
-| Admin Access, anonymous | Anonymous request to `admin-staging.kurocyber.com` is denied before dashboard/API access | Staging | NOT RUN |
+| Webhook grouping/retry | Existing alert-enabled behavior is covered by local tests; skipped in Kurocyber staging while `alert_webhook_enabled=false` | Local tests; staging skipped | SKIPPED live: delivery disabled; live confirmation produced no outbox entry |
+| Admin Access, anonymous | Anonymous request to `admin-staging.kurocyber.com` is denied before dashboard/API access | Staging | PASS: document and API returned Access redirects |
 | Admin Access, unauthorized | Authenticated but unapproved identity is denied | Staging | NOT RUN |
-| Admin Access, authorized | Approved operator identity can use the staging dashboard/API | Staging | NOT RUN |
-| Public entry points and host guard | No public `workers.dev` or preview endpoint; origin host guard rejects unknown hosts | Staging configuration + local guard tests | NOT RUN |
-| Production and wildcard unchanged | `kurocyber-website`, apex, `www`, and existing `*.kurocyber.com/*` route are unchanged | Staging comparison | NOT RUN |
-| Event and audit privacy | No submitted key, auth header, cookies, body, query secrets, or full IP in this report | Local + staging inspection | NOT RUN |
+| Admin Access, authorized | Approved operator identity can use the staging dashboard/API | Staging | Operator reported successful sign-in; not independently verified in the assistant browser, which remains unauthenticated; authenticated API checks NOT RUN |
+| Public entry points and host guard | No public `workers.dev` or preview endpoint; origin host guard rejects unknown hosts | Staging configuration + local guard tests | PASS for settings/source and local guard tests; no live unknown-host invocation |
+| Production and wildcard unchanged | `kurocyber-website`, apex, `www`, and unrelated routes unchanged; do not assume a wildcard exists | Staging comparison | PASS: apex/www custom domains still point to `kurocyber-website`; apex 200, www 301; only two new exact staging routes, no wildcard created |
+| Event and audit privacy | No submitted key, auth header, cookies, body, query secrets, or full IP in this report | Local + staging inspection | PASS for this sanitized report and known-secret absence from remote state; complete event/audit privacy review not performed |
 
 ## Degraded behavior and route safety
 
@@ -121,9 +123,9 @@ block duration is 1 hour. A shortened staging run does not prove the
 | Durable Object/state unavailable | Automated local tests; only a controlled reversible staging fault if safe | NOT RUN |
 | D1 read/write errors | Automated local tests; no deliberate disruption of shared staging data | NOT RUN |
 | Webhook timeout/retry | Automated tests and a controlled staging test endpoint | NOT RUN |
-| Access denial | Live staging request with no/unauthorized Access identity | NOT RUN |
-| Route conflict handling | Read-only route inventory and Terraform plan-time preconditions; use a disposable zone for any live conflict test | NOT RUN |
-| State/D1 recovery and operational errors | Confirm visible logs/recovery where safely observable | NOT RUN |
+| Access denial | Live staging request with no/unauthorized Access identity | Anonymous denial PASS; unapproved authenticated identity NOT RUN |
+| Route conflict handling | Read-only route inventory and Terraform plan-time preconditions; use a disposable zone for any live conflict test | Live inventory/preconditions passed; deliberate conflict NOT RUN |
+| State/D1 recovery and operational errors | Confirm visible logs/recovery where safely observable | PASS for observed failed bootstrap and approved recovery: error surfaced, admin route withheld, committed migration skipped on retry; backup restore NOT RUN |
 
 Do not create a conflicting customer route or intentionally disrupt shared
 Cloudflare storage merely to force a failure. Mark any failure mode not safely
@@ -141,8 +143,8 @@ tested in staging as local-only or not verified.
 | Worker requests, CPU (including per-request or per-1,000-request measure), and usage source | NOT RUN |
 | Durable Object operation counts/latency and usage source | NOT RUN |
 | D1 read/write operation counts, storage, and retention assumptions | NOT RUN |
-| Webhook volume and delivery cost assumptions | NOT RUN |
-| Response-budget value and rationale | NOT RUN |
+| Webhook volume and delivery cost assumptions | Disabled; confirmation produced zero outbox entries; no external webhook configured |
+| Response-budget value and rationale | 100 per source; live bounded 429 response verified; no billing guarantee |
 | Measured total/estimated staging cost and measurement period | NOT RUN |
 | Customer-approved cost/usage budget and go/no-go | NOT RUN |
 
@@ -153,16 +155,32 @@ are not a production guarantee.
 
 | Check | Expected result | Result / approval reference |
 |---|---|---|
-| Public staging route disabled via separate reviewed plan | Exact plan approved; existing `*.kurocyber.com/*` route remains unchanged and becomes applicable again | NOT RUN |
-| Route fallback verified | Record the actual wildcard fallback; do not assume the private static origin is reached after the exact route is disabled | NOT RUN |
+| Public staging route disabled via separate reviewed plan | Exact plan approved; unrelated routes unchanged; do not create or assume a wildcard | NOT RUN |
+| Route fallback verified | Rediscover routes, DNS, and custom domains; do not assume a wildcard exists or the private static origin is reached after route removal | NOT RUN |
 | D1 backup/retention decision | Record decision before destroy | NOT RUN |
 | Staging destroy plan reviewed and separately approved | Removes only module-owned resources | NOT RUN |
 | Teardown verified | DNS, external origin (if any), production Workers/routes, wildcard route, unrelated routes, and Access policies remain intact; private staging origin changes only as listed in the approved plan | NOT RUN |
 
 ## Findings and decision
 
-- Unresolved failures/limitations: NOT RUN
-- Follow-up work: NOT RUN
-- Staging acceptance decision: NOT RUN
-- Reviewer and date: NOT RUN
+- Unresolved failures/limitations: Initial migration-helper result-count
+  mismatch was fixed and recovery verified. Full acceptance remains incomplete.
+  The test runner deliberately triggered its own containment and budget limit;
+  clear that source through the authenticated dashboard before repeating
+  ordinary browsing checks from the same connection.
+- Follow-up work: Independently verify authenticated admin APIs, unauthorized
+  identity denial, manual unblock/audit, cross-source reuse, allowlists,
+  maze/block expiry, real touch input, latency/usage/cost budget, and rollback.
+  Review Worker logs/traces configuration and provider cron teardown caveat.
+  Renew the supplied Cloudflare token before its 2026-11-17 expiry; its current
+  policy covers all zones in the selected account rather than this zone alone.
+- Operations: HCP organization `kurocyber`, workspace
+  `moqesh-kurocyber-staging`, local execution, Cloudflare provider 5.28.1,
+  Terraform CLI 1.10.5. Preserve the installation ID in the ignored deployment
+  tfvars and use this workspace as the sole writer. Local runs still require
+  protected credential files; workspace variables are not injected.
+- Staging acceptance decision: Deployment and smoke testing passed; available
+  for operator testing, not full acceptance or production-apex cutover.
+- Reviewer and date: Copilot-assisted deployment and observed tests, 2026-11-10;
+  operator reported admin sign-in.
 - Production readiness: NOT ESTABLISHED
