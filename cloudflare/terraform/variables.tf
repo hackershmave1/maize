@@ -92,18 +92,18 @@ variable "bait_api_path" {
   type        = string
 
   validation {
-    condition     = startswith(var.bait_api_path, "/") && !strcontains(var.bait_api_path, "*") && !strcontains(var.bait_api_path, "?") && !strcontains(var.bait_api_path, "#") && var.bait_api_path != "/.env"
-    error_message = "bait_api_path must be a distinct absolute URL path without wildcards, query strings, or fragments."
+    condition     = startswith(var.bait_api_path, "/") && !strcontains(var.bait_api_path, "*") && !strcontains(var.bait_api_path, "?") && !strcontains(var.bait_api_path, "#") && !contains(local.disclosure_lure_paths, var.bait_api_path) && var.bait_api_path != "/robots.txt"
+    error_message = "bait_api_path must be a distinct absolute URL path without wildcards, query strings, or fragments, and must not reuse a disclosure lure path or /robots.txt."
   }
 }
 
 variable "lure_paths" {
-  description = "Explicit Worker lure paths. This implementation supports /.env and bait_api_path only."
+  description = "Worker lure paths: the fixed disclosure lures implemented in src/lures.ts plus bait_api_path. Recorded for review only; the Worker does not read this list."
   type        = list(string)
 
   validation {
-    condition     = length(var.lure_paths) == 2 && contains(var.lure_paths, "/.env") && contains(var.lure_paths, var.bait_api_path)
-    error_message = "lure_paths must contain exactly /.env and the configured bait_api_path."
+    condition     = length(var.lure_paths) == length(local.disclosure_lure_paths) + 1 && length(setsubtract(concat(local.disclosure_lure_paths, [var.bait_api_path]), var.lure_paths)) == 0
+    error_message = "lure_paths must contain exactly the disclosure lures implemented by the Worker plus the configured bait_api_path."
   }
 }
 
@@ -250,4 +250,19 @@ variable "enable_public_route" {
   description = "Second-stage gate for the protected hostname/* route. Keep false until staging checks pass."
   type        = bool
   default     = false
+}
+
+locals {
+  # Must match DISCLOSURE_LURES in ../src/lures.ts (enforced by terraform/test/config-consistency.node.mjs).
+  disclosure_lure_paths = [
+    "/.env",
+    "/.env.production",
+    "/.git/config",
+    "/.aws/credentials",
+    "/config.json",
+    "/wp-config.php.bak",
+    "/backup.sql",
+    "/api/v1/keys",
+    "/swagger.json",
+  ]
 }

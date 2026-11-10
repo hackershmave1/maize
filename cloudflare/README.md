@@ -9,8 +9,12 @@ allowlisted or otherwise uncontained source, an ordinary non-lure request is
 forwarded to the selected `ORIGIN` service; it is not sent into the decoy maze
 and is not written to event history. This pass-through still incurs Worker
 execution; non-allowlisted sources with a usable IP also incur a per-source
-state check. The configured `/.env` and `BAIT_API_PATH` are always intercepted
-by the Worker: enabled lures return decoys, while disabled lures return 404
+state check. The disclosure lures (`/.env`, `/.env.production`, `/.git/config`, `/.aws/credentials`, `/config.json`, `/wp-config.php.bak`, `/backup.sql`, `/api/v1/keys`, and `/swagger.json`) and `BAIT_API_PATH` are always
+intercepted by the Worker. Disclosure lures leak the same synthetic key (or, for
+`/swagger.json`, advertise the bait API) and are logged as unconfirmed views;
+only Bearer reuse of that key at `BAIT_API_PATH` confirms a source.
+`/robots.txt` is answered by the Worker with `Disallow` hints for every lure and
+is never logged. Lures are always handled by the Worker: enabled lures return decoys, while disabled lures return 404
 rather than reaching `ORIGIN`. A confirmed source receives decoy/maze or block
 responses across the whole hostname and is not forwarded to `ORIGIN`.
 
@@ -40,7 +44,8 @@ return 404 without reaching the origin.
 
 Runtime settings and the operator allowlist are stored in D1. The admin and
 containment-index migrations (`migrations/0002_admin.sql` and
-`migrations/0003_containment_sources.sql`) must be applied before attaching the
+`migrations/0003_containment_sources.sql`) and the expanded lure-route migration
+(`migrations/0004_more_lure_routes.sql`) must be applied before attaching the
 Worker route. Retention can be reduced from the 30-day maximum; event source
 IPs, event history, audit records, and webhook payloads expire within that
 window. A separate minimal containment index keeps a source discoverable until

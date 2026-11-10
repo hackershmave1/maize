@@ -301,3 +301,23 @@ nodeTest("webhook alerts default enabled and are disabled only for Kurocyber sta
   const outputs = await terraformFile("outputs.tf");
   assert.match(outputs, /output "secret_binding_names" \{[\s\S]*?value\s*=\s*var\.alert_webhook_enabled\s*\?[\s\S]*?:\s*\[var\.lure_key_secret_binding_name\]/);
 });
+
+nodeTest("Terraform lure path lists match the Worker's disclosure lures", async () => {
+  const [lureSource, variablesText, ...tfvars] = await Promise.all([
+    readFile(new URL("../../src/lures.ts", import.meta.url), "utf8"),
+    readFile(new URL("../variables.tf", import.meta.url), "utf8"),
+    readFile(new URL("../examples/basic.tfvars.example", import.meta.url), "utf8"),
+    readFile(new URL("../examples/kurocyber-staging.tfvars.example", import.meta.url), "utf8"),
+  ]);
+  const workerPaths = [...lureSource.matchAll(/^  "(\/[^"]+)": \{$/gm)].map((match) => match[1]);
+  const localBlock = variablesText.match(/disclosure_lure_paths = \[([\s\S]*?)\]/)?.[1] ?? "";
+  const terraformPaths = [...localBlock.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+
+  assert.equal(workerPaths.length, 9);
+  assert.deepEqual(terraformPaths, workerPaths);
+  for (const text of tfvars) {
+    const listed = JSON.parse(text.match(/^lure_paths\s*=\s*(\[.*\])$/m)[1]);
+    const bait = text.match(/^bait_api_path\s*=\s*"([^"]+)"$/m)[1];
+    assert.deepEqual(listed, [...workerPaths, bait]);
+  }
+});

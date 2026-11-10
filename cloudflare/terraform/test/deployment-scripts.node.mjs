@@ -109,6 +109,7 @@ nodeTest("D1 migration runner applies and verifies all schema migrations against
     "0001_events.sql",
     "0002_admin.sql",
     "0003_containment_sources.sql",
+    "0004_more_lure_routes.sql",
   ]);
   assert.ok(requests.every(({ url }) =>
     url.endsWith("/d1/database/12345678-1234-1234-1234-123456789abc/query")));
@@ -282,4 +283,35 @@ nodeTest("secret provisioner rejects weak lure keys before making API calls", as
     /at least 32 bytes/,
   );
   assert.equal(requests, 0);
+});
+
+nodeTest("migration 0004 preserves events and accepts exactly the Worker's lure routes", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(":memory:");
+  for (const name of ["0001_events.sql", "0002_admin.sql", "0003_containment_sources.sql"]) {
+    database.exec(await readFile(new URL(`../../migrations/${name}`, import.meta.url), "utf8"));
+  }
+  database.prepare(
+    "INSERT INTO events (id, installation_id, type, route, source_ip, confirmed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run("existing", "install", "confirmed_reuse", "bait-api", "192.0.2.1", 1, 1);
+
+  database.exec(await readFile(new URL("../../migrations/0004_more_lure_routes.sql", import.meta.url), "utf8"));
+
+  assert.deepEqual(
+    { ...database.prepare("SELECT id, route, confirmed FROM events").get() },
+    { id: "existing", route: "bait-api", confirmed: 1 },
+  );
+  const indexes = database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'").all()
+    .map(({ name }) => name).filter((name) => !name.startsWith("sqlite_"));
+  assert.deepEqual(indexes.sort(), ["events_created_idx", "events_installation_created_idx"]);
+
+  const lureSource = await readFile(new URL("../../src/lures.ts", import.meta.url), "utf8");
+  const workerRoutes = [...lureSource.matchAll(/^    route: "([a-z-]+)",$/gm)].map((match) => match[1]);
+  workerRoutes.push("bait-api");
+  assert.equal(workerRoutes.length, 10);
+  const insert = database.prepare(
+    "INSERT INTO events (id, installation_id, type, route, source_ip, confirmed, created_at) VALUES (?, 'install', 'unconfirmed_lure_view', ?, NULL, 0, 2)",
+  );
+  for (const route of workerRoutes) insert.run(`event-${route}`, route);
+  assert.throws(() => insert.run("unknown", "not-a-lure"), /CHECK constraint failed/);
 });

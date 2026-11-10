@@ -1,4 +1,4 @@
-import { handleLure, isLureRequest } from "./lures";
+import { handleLure, isLureRequest, robotsTxt, type LureRoute } from "./lures";
 import {
   deleteExpiredAdminAudit,
   deleteExpiredContainmentSources,
@@ -130,12 +130,12 @@ export default {
     }
 
     if (allowlisted) {
-      if (!lureRequest) return env.ORIGIN.fetch(request);
+      if (!lureRequest) return forwardToOrigin(request, env);
       return serveLure(request, env, context, allowlisted, settings);
     }
 
     if (sourceIp === null) {
-      if (!lureRequest) return env.ORIGIN.fetch(request);
+      if (!lureRequest) return forwardToOrigin(request, env);
       return serveLure(request, env, context, false, settings);
     }
 
@@ -148,7 +148,7 @@ export default {
       reportStateError();
       return lureRequest
         ? serveLure(request, env, context, false, settings)
-        : env.ORIGIN.fetch(request);
+        : forwardToOrigin(request, env);
     }
 
     if (mode.mode === "blocked") {
@@ -198,7 +198,7 @@ export default {
       return result.response;
     }
 
-    return env.ORIGIN.fetch(request);
+    return forwardToOrigin(request, env);
   },
 
   async scheduled(
@@ -369,6 +369,19 @@ function reportStateError(): void {
   console.error("Agent session state unavailable; using safe fallback");
 }
 
+function forwardToOrigin(request: Request, env: Env): Promise<Response> | Response {
+  if (new URL(request.url).pathname === "/robots.txt") {
+    return new Response(robotsTxt(env), {
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+  return env.ORIGIN.fetch(request);
+}
+
 async function serveLure(
   request: Request,
   env: Env,
@@ -422,9 +435,9 @@ async function persistLureResult(
   }
   const eventType: EventType = result.event.confirmed
     ? "confirmed_reuse"
-    : result.event.route === "env-file"
-    ? "unconfirmed_lure_view"
-    : "invalid_key_attempt";
+    : result.event.route === "bait-api"
+    ? "invalid_key_attempt"
+    : "unconfirmed_lure_view";
   const event: Omit<EventInput, "installationId"> & { installationId: string | undefined } = {
     installationId: env.INSTALLATION_ID,
     type: eventType,
@@ -489,7 +502,7 @@ async function persistEvent(
   input: {
     installationId: string | undefined;
     type: EventType;
-    route: "env-file" | "bait-api" | null;
+    route: LureRoute | null;
     sourceIp: string | null;
     confirmed: boolean;
   },

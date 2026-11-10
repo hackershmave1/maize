@@ -1,3 +1,4 @@
+import type { LureRoute } from "./lures";
 import { normalizeSourceIp } from "./session-state";
 
 export type EventType =
@@ -9,7 +10,7 @@ export type EventType =
 export interface EventInput {
   installationId: string;
   type: EventType;
-  route: "env-file" | "bait-api" | null;
+  route: LureRoute | null;
   sourceIp: string | null;
   confirmed: boolean;
 }

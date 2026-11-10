@@ -59,9 +59,11 @@ Use the available Cloudflare MCP tools only for read-only inspection. Confirm:
   it is not lure-path-only routing.
 
 Do not continue until the user confirms the complete host-wide behavior and
-exact lure paths: `/.env` and the explicitly configured `BAIT_API_PATH`.
-Terraform intentionally supports only these two lure paths; do not imply that
-other paths are configured lures. Confirm the runtime durations, response
+exact lure paths: the fixed disclosure lures `/.env`, `/.env.production`, `/.git/config`, `/.aws/credentials`, `/config.json`, `/wp-config.php.bak`, `/backup.sql`, `/api/v1/keys`, and `/swagger.json` (each leaks the same
+synthetic key or advertises the bait API), plus the explicitly configured
+`BAIT_API_PATH`, which is the only path that confirms reuse. `/robots.txt` is
+served by the Worker with `Disallow` hints for these paths and is not logged.
+Do not imply that any other path is a configured lure. Confirm the runtime durations, response
 budget, allowlist, retention, alert webhook destination, and staging target.
 The current Terraform binding sets `ALERT_DIRECT_LURE = false`; an allowlisted
 direct-lure request is recorded but does not send its own webhook alert or
@@ -88,7 +90,8 @@ start containment.
   `secret_rotation_revision` when rotating either value.
 - Copy `terraform/examples/basic.tfvars.example` to an ignored
   `terraform/terraform.tfvars`; replace all placeholders and verify that
-  `lure_paths` contains only `/.env` and the configured `bait_api_path`.
+  `lure_paths` lists exactly the fixed disclosure lures plus the configured
+  `bait_api_path` (Terraform validation enforces this).
 - For Kurocyber staging, instead copy
   `terraform/examples/kurocyber-staging.tfvars.example`. Preserve its isolated
   Worker (`moqesh-kurocyber-staging`) and D1
@@ -107,8 +110,8 @@ start containment.
 Keep `enable_public_route = false` for the first apply. Terraform must use
 `cloudflare_d1_database.events.id` for the Worker binding and migrations; never
 use Wrangler's local placeholder D1 ID. The apply runs the actual D1 migration
-helper and verifies migrations `0001_events.sql`, `0002_admin.sql`, and
-`0003_containment_sources.sql`, initializes runtime settings without
+helper and verifies migrations `0001_events.sql`, `0002_admin.sql`,
+`0003_containment_sources.sql`, and `0004_more_lure_routes.sql`, initializes runtime settings without
 overwriting existing dashboard values, uploads/verifies the secret bindings,
 configures the `* * * * *` scheduled trigger, and creates the Access-protected
 admin route. For Kurocyber staging, the bootstrap plan also creates the

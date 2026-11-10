@@ -16,6 +16,7 @@ import {
 import eventsSchema from "../migrations/0001_events.sql?raw";
 import adminSchema from "../migrations/0002_admin.sql?raw";
 import containmentSchema from "../migrations/0003_containment_sources.sql?raw";
+import lureRoutesSchema from "../migrations/0004_more_lure_routes.sql?raw";
 
 const database = (cloudflareEnv as { EVENTS_DB: EventDatabase }).EVENTS_DB;
 const installationId = "admin-api-test";
@@ -39,7 +40,7 @@ const assertionKeys = await crypto.subtle.generateKey(
 const publicJwk = await crypto.subtle.exportKey("jwk", assertionKeys.publicKey);
 
 beforeAll(async () => {
-  for (const schema of [eventsSchema, adminSchema, containmentSchema]) {
+  for (const schema of [eventsSchema, adminSchema, containmentSchema, lureRoutesSchema]) {
     for (const statement of schema.split(";").map((part) => part.trim()).filter(Boolean)) {
       await database.prepare(statement).run();
     }
@@ -1009,4 +1010,21 @@ it("accepts a signed Access assertion for an authorized admin API request", asyn
   const body = await response.json() as { events: unknown[]; nextCursor: unknown };
   expect(Array.isArray(body.events)).toBe(true);
   expect(body).toHaveProperty("nextCursor");
+});
+
+it("stores and lists events from the expanded disclosure lure routes", async () => {
+  const now = 2_100_000_000_000;
+  await recordEvent(database, {
+    installationId,
+    type: "unconfirmed_lure_view",
+    route: "git-config",
+    sourceIp: "198.51.100.9",
+    confirmed: false,
+  }, now);
+
+  const response = await handleAdminApiRequest(adminRequest("/events?limit=1"), createEnv(), actor, now + 1);
+  const body = await response.json() as { events: { route: string | null }[] };
+
+  expect(response.status).toBe(200);
+  expect(body.events[0]?.route).toBe("git-config");
 });

@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { handleLure } from "../src/lures";
+import { handleLure, isLureRequest, robotsTxt } from "../src/lures";
 import type { Env } from "../src";
 
 const verifierMaterial = "unit-test-verifier-material";
@@ -152,4 +152,64 @@ it("may alert on allowlisted confirmation without starting a maze or blocking", 
   });
   expect(result).not.toHaveProperty("maze");
   expect(result).not.toHaveProperty("block");
+});
+
+const disclosureLures = [
+  ["/.env.production", "env-production", "text/plain"],
+  ["/.git/config", "git-config", "text/plain"],
+  ["/.aws/credentials", "aws-credentials", "text/plain"],
+  ["/config.json", "config-json", "application/json"],
+  ["/wp-config.php.bak", "wp-config-backup", "text/plain"],
+  ["/backup.sql", "sql-backup", "application/sql"],
+  ["/api/v1/keys", "api-keys", "application/json"],
+] as const;
+
+it.each(disclosureLures)(
+  "serves %s as an unconfirmed disclosure lure leaking the same synthetic key",
+  async (path, route, contentType) => {
+    const env = createEnv();
+    const dotEnv = await (await handleLure(new Request("https://lure.test/.env"), env)).response.text();
+    const key = dotEnv.match(/^API_KEY=(.+)$/m)?.[1];
+    expect(isLureRequest(new Request(`https://lure.test${path}`), env)).toBe(true);
+
+    const result = await handleLure(new Request(`https://lure.test${path}`), env);
+    const body = await result.response.text();
+
+    expect(result.response.status).toBe(200);
+    expect(result.response.headers.get("Content-Type")).toContain(contentType);
+    expect(result.response.headers.get("Cache-Control")).toBe("no-store");
+    expect(key).toMatch(/^[a-f0-9]{64}$/);
+    expect(body).toContain(key);
+    expect(body).toContain(`https://lure.test${baitApiPath}`);
+    expect(body).not.toContain(verifierMaterial);
+    expect(result.event).toMatchObject({ route, confirmed: false });
+    expect(result).not.toHaveProperty("alert");
+  },
+);
+
+it("serves an OpenAPI swagger lure that advertises the bait API without leaking the key", async () => {
+  const env = createEnv();
+  const result = await handleLure(new Request("https://lure.test/swagger.json"), env);
+  const spec = await result.response.json() as { paths: Record<string, unknown>; components: unknown };
+
+  expect(result.response.status).toBe(200);
+  expect(Object.keys(spec.paths)).toEqual(expect.arrayContaining([baitApiPath, "/api/v1/keys"]));
+  expect(JSON.stringify(spec.components)).toContain("bearer");
+  expect(JSON.stringify(spec)).not.toMatch(/[a-f0-9]{64}/);
+  expect(result.event).toMatchObject({ route: "swagger", confirmed: false });
+});
+
+it("does not treat robots.txt or near-miss paths as lures", () => {
+  const env = createEnv();
+  for (const path of ["/robots.txt", "/.env.bak", "/.git/config/", "/config.json.old", "/api/v1/keys/1"]) {
+    expect(isLureRequest(new Request(`https://lure.test${path}`), env)).toBe(false);
+  }
+});
+
+it("lists every lure in a robots.txt disallow hint", () => {
+  const body = robotsTxt(createEnv());
+  for (const path of ["/.env", "/.git/config", "/backup.sql", "/api/v1/keys", "/swagger.json", baitApiPath]) {
+    expect(body).toContain(`Disallow: ${path}\n`);
+  }
+  expect(body.startsWith("User-agent: *\n")).toBe(true);
 });

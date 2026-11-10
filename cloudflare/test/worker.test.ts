@@ -568,3 +568,65 @@ it("fails open for ordinary traffic but keeps lures decoy-only when state is una
     error.mockRestore();
   }
 });
+
+it("records every disclosure lure as an unconfirmed view without reaching the origin", async () => {
+  const { database, statements } = createEventsDatabase();
+  const { env, origin, session } = createEnv(createSession(), { eventsDb: database });
+  const lures = {
+    "/.env.production": "env-production",
+    "/.git/config": "git-config",
+    "/.aws/credentials": "aws-credentials",
+    "/config.json": "config-json",
+    "/wp-config.php.bak": "wp-config-backup",
+    "/backup.sql": "sql-backup",
+    "/api/v1/keys": "api-keys",
+    "/swagger.json": "swagger",
+  };
+  for (const path of Object.keys(lures)) {
+    const response = await worker.fetch(
+      new Request(`https://site.test${path}`, { headers: { "CF-Connecting-IP": sourceIp } }),
+      env,
+    );
+    expect(response.status).toBe(200);
+  }
+
+  const events = statements.filter(({ sql }) => sql.includes("INSERT INTO events"));
+  expect(events.map(({ params }) => [params[2], params[3]])).toEqual(
+    Object.values(lures).map((route) => ["unconfirmed_lure_view", route]),
+  );
+  expect(origin.fetch).not.toHaveBeenCalled();
+  expect(session.confirmKeyReuse).not.toHaveBeenCalled();
+});
+
+it("contains a source that reuses a key discovered in config.json", async () => {
+  const { env, session } = createEnv();
+  const config = await (await worker.fetch(
+    new Request("https://site.test/config.json", { headers: { "CF-Connecting-IP": sourceIp } }),
+    env,
+  )).json() as { api: { apiKey: string } };
+
+  const response = await worker.fetch(
+    new Request(`https://site.test${baitApiPath}`, {
+      headers: { Authorization: `Bearer ${config.api.apiKey}`, "CF-Connecting-IP": sourceIp },
+    }),
+    env,
+  );
+
+  expect(response.status).toBe(200);
+  expect(session.confirmKeyReuse).toHaveBeenCalledOnce();
+});
+
+it("serves robots.txt lure hints without an event or origin request", async () => {
+  const { database, statements } = createEventsDatabase();
+  const { env, origin } = createEnv(createSession(), { eventsDb: database });
+  const response = await worker.fetch(
+    new Request("https://site.test/robots.txt", { headers: { "CF-Connecting-IP": sourceIp } }),
+    env,
+  );
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toContain("text/plain");
+  expect(await response.text()).toContain("Disallow: /.git/config\n");
+  expect(origin.fetch).not.toHaveBeenCalled();
+  expect(statements.filter(({ sql }) => sql.includes("INSERT INTO events"))).toEqual([]);
+});
