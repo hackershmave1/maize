@@ -1,4 +1,5 @@
 import io
+import json
 import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError, URLError
@@ -8,19 +9,35 @@ from cloudflare.scripts import demo_attack as demo
 KEY = "a" * 64
 
 
+TOKEN = "Bearer " + "b" * 64
+
+
+def lead(index):
+    return {"endpoint": demo.BASE_URL + demo.HOP_PATHS[index], "authorization": TOKEN}
+
+
+def hop_body(index):
+    body = {"data": {"hop": index + 2}, "readonly": True}
+    if index + 1 < len(demo.HOP_PATHS):
+        body["next"] = lead(index + 1)
+    return json.dumps(body)
+
+
 def responses():
     return [
         demo.Response(200, {"Content-Type": "text/html"}, "<title>Signal Sprint</title>"),
         demo.Response(401, {}, '{"error":"Unauthorized"}'),
         demo.Response(200, {}, f"API_KEY={KEY}\nAPI_BASE_URL={demo.BASE_URL}/api/private/account\n"),
-        demo.Response(200, {}, '{"data":{"id":"synthetic-account","status":"active"},"readonly":true}'),
+        demo.Response(200, {}, json.dumps({"data": {"id": "acct_demo"}, "readonly": True, "next": lead(0)})),
         demo.Response(404, {}, '{"error":"Not found"}'),
+        *[demo.Response(200, {}, hop_body(index)) for index in range(len(demo.HOP_PATHS))],
+        demo.Response(403, {}, "Forbidden"),
         demo.Response(200, {"Content-Type": "text/html"}, "<title>Signal Sprint</title>"),
     ]
 
 
 class DemoTests(unittest.TestCase):
-    def test_walkthrough_previews_each_request_and_requires_six_approvals(self):
+    def test_walkthrough_previews_each_request_and_requires_sixteen_approvals(self):
         events = []
         replies = iter(responses())
 
@@ -43,14 +60,17 @@ class DemoTests(unittest.TestCase):
                 "/.env",
                 "/api/private/account",
                 "/",
+                *demo.HOP_PATHS,
+                "/",
                 "/",
             ],
         )
         self.assertEqual(requests[3][2]["Authorization"], f"Bearer {KEY}")
-        self.assertEqual(sum(event[0] == "approval" for event in events), 6)
+        self.assertEqual(requests[5][2]["Authorization"], TOKEN)
+        self.assertEqual(sum(event[0] == "approval" for event in events), 16)
         text = "\n".join(event[1] for event in events if event[0] == "output")
-        for stage in range(1, 7):
-            self.assertIn(f"STAGE {stage}/6", text)
+        for stage in range(1, 9):
+            self.assertIn(f"STAGE {stage}/8", text)
         for expected in [
             f"Authorization: Bearer {KEY}",
             "Request body: (none)",
@@ -58,7 +78,8 @@ class DemoTests(unittest.TestCase):
             "HTTP 404",
             "Unblock",
             "refresh",
-            "synthetic-account",
+            "HOP 10/10",
+            "HTTP 403",
             "DEMO COMPLETE",
         ]:
             self.assertIn(expected, text)
@@ -116,12 +137,12 @@ class DemoTests(unittest.TestCase):
                 self.assertEqual(request.call_count, 3)
 
     def test_missing_containment_and_failed_unblock_are_explicit_failures(self):
-        for index in [4, 5]:
-            with self.subTest(stage=index + 1):
+        for index, stage, wrong in [(4, 5, 0), (14, 7, 4), (15, 8, 4)]:
+            with self.subTest(stage=stage):
                 replies = responses()
-                replies[index] = replies[0] if index == 4 else replies[4]
+                replies[index] = replies[wrong]
                 request = Mock(side_effect=replies)
-                with self.assertRaisesRegex(demo.DemoError, f"STAGE {index + 1}"):
+                with self.assertRaisesRegex(demo.DemoError, f"STAGE {stage}"):
                     demo.run_demo(input_fn=lambda _: "NEXT", output=lambda _: None, request_fn=request)
                 self.assertEqual(request.call_count, index + 1)
 
@@ -201,7 +222,7 @@ class DemoTests(unittest.TestCase):
         text = "\n".join(event[1] for event in before if event[0] == "output")
         self.assertIn("2001:db8::1", text)
         self.assertIn(f"{demo.BASE_URL}/cdn-cgi/trace", text)
-        self.assertEqual(sum(event == ("approval",) for event in events), 8)
+        self.assertEqual(sum(event == ("approval",) for event in events), 18)
 
     def test_preflight_cancel_sends_no_attack_request(self):
         request = Mock()
@@ -237,6 +258,34 @@ class DemoTests(unittest.TestCase):
             self.assertEqual(demo.main([]), 2)
         run.assert_not_called()
         self.assertIn("interactive terminal", stderr.getvalue())
+
+    def test_chain_refuses_leads_outside_the_fixed_staging_chain(self):
+        bad_leads = [
+            {"endpoint": "https://example.invalid" + demo.HOP_PATHS[1], "authorization": TOKEN},
+            {"endpoint": demo.BASE_URL + "/api/other", "authorization": TOKEN},
+            {"endpoint": demo.BASE_URL + demo.HOP_PATHS[1], "authorization": "Bearer short"},
+        ]
+        for bad in bad_leads:
+            with self.subTest(lead=bad):
+                replies = responses()
+                replies[5] = demo.Response(200, {}, json.dumps({"data": {}, "next": bad}))
+                request = Mock(side_effect=replies)
+                with self.assertRaises(demo.DemoError):
+                    demo.run_demo(input_fn=lambda _: "NEXT", output=lambda _: None, request_fn=request)
+                self.assertEqual(request.call_count, 6)
+
+    def test_final_hop_offering_another_lead_is_a_failure(self):
+        replies = responses()
+        replies[13] = demo.Response(200, {}, json.dumps({"data": {}, "next": lead(0)}))
+        request = Mock(side_effect=replies)
+        with self.assertRaises(demo.DemoError):
+            demo.run_demo(input_fn=lambda _: "NEXT", output=lambda _: None, request_fn=request)
+        self.assertEqual(request.call_count, 14)
+
+    def test_transport_allows_only_known_hop_paths(self):
+        self.assertTrue(set(demo.HOP_PATHS) <= demo.ALLOWED_PATHS)
+        with self.assertRaises(demo.DemoError):
+            demo.send_request("/api/internal/other", {})
 
 
 if __name__ == "__main__":
