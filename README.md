@@ -111,6 +111,11 @@ Run the demo test suite (it sends no network requests) from the repository root:
 python3 -m unittest discover -s cloudflare/test -p 'demo_attack_test.py' -v
 ```
 
+CI ([`.github/workflows/cloudflare.yml`](.github/workflows/cloudflare.yml)) runs
+these checks plus `terraform fmt` and `terraform validate` on pull requests and
+pushes that touch `cloudflare/`. It uses no Cloudflare or Terraform
+credentials and never deploys.
+
 ## Deploying
 
 Deployment is Terraform-driven. The customer owns the Cloudflare account, the
