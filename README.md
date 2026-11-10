@@ -2,182 +2,156 @@
 
 <img src="web/public/animal-pot-logo.jpg" alt="Animal Pot logo" width="220">
 
-AI HoneyPot Defense
+**An edge honeypot for automated attackers, running on Cloudflare Workers.**
 
-An open-source honeypot against **autonomous AI agents** that scan your
-infrastructure. Animal Pot serves a **Token Exhaust labyrinth** (an infinite,
-coherent maze of believable content) that traps automated agents, **drains
-their LLM's tokens**, profiles their behavior, and lets you detect and
-block them. A native **Python** project (FastAPI + SQLAlchemy).
+Animal Pot sits in front of a real website as a Cloudflare Worker. Ordinary
+visitors reach the site as normal. A scanner, bot, or AI agent that goes
+looking for secrets finds planted fake credentials. If it uses them, it is
+pulled into a chain of fake API data, kept away from the real site, and then
+blocked. An Access-protected dashboard shows every detection and lets an
+operator release a blocked source.
 
-<!-- Replace `juliourena/moqesh` with the repo's real GitHub slug (badge + GHCR, below). -->
-![CI](https://github.com/juliourena/moqesh/actions/workflows/ci.yml/badge.svg)
+Animal Pot is a fork of [juliourena/moqesh](https://github.com/juliourena/moqesh),
+rebuilt for Cloudflare's edge. It no longer ships the upstream Python server,
+remote sensors, or Docker images. Internal names (the `moqesh` Worker, the
+`MOQESH_` prefixes) are kept from the upstream code.
 
-**Documentation:** [configuration](docs/CONFIGURATION.md) · [worldsmith (AI builder)](docs/WORLDSMITH.md)
-· [remote sensors](docs/SENSORS.md) · [contributing](CONTRIBUTING.md) · [security](SECURITY.md)
+**Documentation:** [Cloudflare Worker, deployment, and demo](cloudflare/README.md)
+· [staging acceptance evidence](cloudflare/test/staging-acceptance.md)
+· [security](SECURITY.md)
 
 ## How it works
 
-1. **Lure**: serves a fake internal portal with directory listings, `.env` files,
-   configs, READMEs, APIs, and decoy binaries.
-2. **Trap**: every page links deeper. Listings never end, APIs paginate
-   forever, READMEs point to "juicy" files, and JS bundles hide endpoints. An
-   agent that *follows everything* navigates indefinitely.
-3. **Detect**: every request is scored by a **behavioral rules** engine
-   (timing regularity, depth descent, exhaustive fan-out, breadcrumb/README
-   following, JS deobfuscation, AI-crawler UAs…). Crossing the threshold raises an alert.
-4. **Confirm (optional)**: an LLM module reviews gray-zone sessions and
-   confirms whether the visitor is an agent. The system works **without** this module.
-5. **Block**: reuse of a planted credential (honeytoken) or a score above the
-   threshold actively blocks the IP (403) and can notify via webhook.
-
-All content is **deterministic per `(seed, path)`**: the same URL always returns
-the same page within a deployment (no telltale random noise), while two
-deployments with different seeds share no static signature (anti-fingerprint).
-
-## Generation modes
-
-- **Template**: generic vocabulary mutated by seed (zero-config, works against any target).
-- **Mimic**: profiles a real site (`TargetUrl`, read-only crawl) and generates content that blends in with it.
-- **Static**: disables the procedural labyrinth.
-
-## CTF scenarios
-
-On top of the labyrinth you can enable an authorable **scenario**: an attack
-chain with hidden routes, real credential gates, decompilable binaries, and
-vaults. Two packs are included: `corp-breach` (DLL → vault → credential reuse →
-flag) and `git-leak` (`.git` leak → token → CI secrets). Editable and
-importable/exportable as JSON from the dashboard.
-
-## World and Worldsmith (inert content + AI)
-
-The primary content source is the **World**: a tree of real, **inert** files
-(several portals under different prefixes, with mock data) that the honeypot serves **only as
-bytes; it never executes anything**. It replaces the generated labyrinth (which becomes *legacy*,
-OFF when a World is present) and removes the structural artifacts that gave the honeypot away.
-
-For **large-scale token burning without the giveaway of generated content**, a World
-directory can be marked `"autoindex": true` (it serves an "open directory" listing) and filled
-with voluminous trees of **real text** using [`scripts/genbig.py`](scripts/genbig.py);
-large files are streamed. Details in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
-
-The **worldsmith** is an AI agent that **builds and evolves** that World plus a **lure**
-placed on the attacker's hunting path (a leaked `.env` with a single honeytoken → a
-protected ops console; reusing the token fires `credential_reuse` and blocks). Inertness is
-**enforced mechanically** (per-write validation + re-validation of the tree before publishing),
-not entrusted to the prompt. Providers: `stub` (no AI), `api` (Anthropic tool use), and `claude_cli`
-(subscription). Usage:
-
-```bash
-python -m moqesh.worldsmith build --provider claude_cli --brand "Harborline" --profile saas
+```mermaid
+flowchart LR
+    V[Visitor] --> W[Animal Pot Worker]
+    W -->|uncontained, normal path| O[Real site / origin]
+    W -->|lure path| L[Fake .env, config.json, .git/config ...]
+    L -->|attacker reuses the fake key| H1[Rabbit hole: hop 1]
+    H1 --> H2[hops 2 ... 9] --> H10[hop 10]
+    H10 --> B[Blocked: HTTP 403]
+    W -. while in the maze .-> M[Every other request: HTTP 404]
 ```
 
-Full guide: [`docs/WORLDSMITH.md`](docs/WORLDSMITH.md).
+1. **Pass-through.** Every request to the protected hostname goes through the
+   Worker. Visitors who are not contained are forwarded to the real origin,
+   and nothing is logged for them.
+2. **Lure.** Common leak paths (`/.env`, `/.env.production`, `/.git/config`,
+   `/.aws/credentials`, `/config.json`, `/wp-config.php.bak`, `/backup.sql`,
+   `/api/v1/keys`, `/swagger.json`, plus `robots.txt` hints) return
+   convincing files that contain the same synthetic API key and point to a
+   bait API. Viewing a lure is logged, but it does not count as an attack.
+3. **Confirm.** Calling the bait API with that key proves intent. The source
+   IP is confirmed and moved into the **maze**: from then on, the real site
+   and every other path return `404` to it.
+4. **Rabbit hole.** The bait response is hop 1 of a 10-hop chain of fake data
+   (billing, team, admin users, API keys, internal services, deploy secrets,
+   database credentials, backups, vault root). Each hop hands over the next
+   endpoint and a bearer token. All values are derived with HMAC and contain
+   no real secrets. Skipping a hop or using a wrong token gets the maze `404`.
+5. **Block.** Reaching hop 10 blocks the source immediately (`403`, 24 hours
+   by default). A source that never finishes the chain is blocked once the
+   maze time limit runs out.
+6. **Operate.** The admin dashboard, on a separate hostname behind Cloudflare
+   Access, lists detections and contained sources. It records an audit entry
+   for every manual unblock.
 
-## Quick start
-
-### Docker
-
-```bash
-docker compose up --build
-```
-
-Dashboard: http://localhost:5000 · Honeypot: http://localhost:8080
-
-### Development
-
-```bash
-# Backend (honeypot + dashboard/API in one process)
-uv venv .venv && uv pip install --python .venv -e .
-.venv/bin/moqesh            # or: .venv/bin/python -m moqesh.main
-
-# Frontend (hot reload, proxies to :5000)
-cd web && npm install && npm run dev
-```
-
-Configuration via environment (`MOQESH_` prefix): see [`.env.example`](.env.example).
-
-## Sensors (remote deployment)
-
-Animal Pot can protect servers it does **not** live on, via *sensors*:
-
-- **Agent**: a self-contained binary that runs the full engine on the remote
-  server (infinite labyrinth, credential/CTF gates) and sends signed telemetry.
-- **Agentless**: static ZIPs (randomized, patternless) that you unzip wherever
-  you like + a scheduled task that ships the logs; no software to install.
-
-One-command enrollment from the dashboard (with live connection verification),
-hot control and key rotation, HMAC-signed auth in both directions.
-Full guide: [`docs/SENSORS.md`](docs/SENSORS.md).
+Containment is keyed on the **public source IP**, not the browser or the
+device. An IPv4 and an IPv6 address from the same machine are separate
+sources.
 
 ## Architecture
 
+| Component | Cloudflare service | Role |
+|---|---|---|
+| Animal Pot Worker | Workers (whole-host route) | Lures, bait API, rabbit hole, maze, block, pass-through to the origin |
+| Per-source state | Durable Objects (`AgentSession`) | Containment state and chain depth for each source IP |
+| Event store | D1 | Detections, settings, allowlist, audit log, containment index |
+| Dashboard | Workers static assets + Cloudflare Access | Operator UI and `/api/admin/*`, served only on the admin hostname |
+| Staging origin | Separate Worker (service binding) | Isolated demo site for staging, so production is never touched |
+| Infrastructure | Terraform (HCP Terraform state) | Worker, D1 and migrations, Access app, routes; no DNS changes |
+
+## Repository layout
+
 ```
-moqesh/
-  rng.py          deterministic RNG per (seed,path); anti-fingerprint primitive
-  vocabulary.py   vocabulary pools by theme
-  labyrinth.py    Token Exhaust generator (legacy: OFF when a World is active)
-  world.py        inert World: serves ONLY bytes of real multi-portal files (primary source)
-  worlds/         curated seed of inert portals + manifest
-  worldsmith/     AI agent that builds/evolves the World + the lure (validated inertness)
-  detection.py    behavioral scoring engine (10 rules + scenario signals)
-  scenarios.py    CTF engine + built-in packs (import/export)
-  forge.py        decoy binaries (patched DLL template; PE fallback)
-  mimic.py        real-site profiler (Mimic mode)
-  ai_analyst.py   optional confirmation (heuristic or OpenAI-compatible LLM)
-  blocks.py       active IP blocking + webhooks
-  models.py       SQLAlchemy models (SQLite)
-  schemas.py      Pydantic contract (camelCase) for the frontend
-  realtime.py     native WebSocket (real time to the dashboard)
-  pipeline.py     central scoring (shared by the local honeypot and remote ingestion)
-  security.py     bidirectional HMAC, anti-replay, rate limiting, dedup
-  provisioning.py install scripts/instructions (1-command onboarding)
-  logparse.py     agentless log parser (nginx/apache/caddy/json)
-  bundles.py      random static ZIP generator (agentless mode)
-  honeypot.py     local trap server (:8080); the `local` sensor
-  agent/          self-contained remote agent (PyInstaller binary)
-  clients/        agentless shipping script (sh + PowerShell)
-  api/            dashboard + REST API + sensor ingestion/control (:5000)
-web/              React + TypeScript dashboard (Vite, Tailwind)
+cloudflare/
+  src/               Worker: routing, lures, rabbit hole, sessions, admin API
+  dashboard/         React + TypeScript operator dashboard (Vite)
+  migrations/        D1 schema migrations (0001-0005)
+  staging-origin/    isolated static origin used for staging
+  terraform/         customer-owned Terraform deployment
+  scripts/           guided attack demo (demo_attack.py)
+  test/              Worker, deployment, origin, and demo tests
+docs/superpowers/    design specs and implementation plans
 ```
 
-**Decisions**: synchronous SQLAlchemy (FastAPI threadpool) for SQLite; async `httpx`
-only for outbound HTTP (mimic, LLM, webhooks); real time via native
-WebSocket. The forge uses a DLL template generated offline (see
-[`tools/build_template_dll.md`](tools/build_template_dll.md)); without it, it degrades to
-a binary with embedded credentials.
+The remaining top-level code (`moqesh/`, `web/`, `tests/`, `deploy/`, the
+`Dockerfile`) is inherited from upstream. Animal Pot's deployment does not
+use it.
 
-## Tests and CI
+## Quick start
 
-```bash
-.venv/bin/python -m pytest -q         # determinism, scenarios, sensors, and integration
-.venv/bin/ruff check moqesh tests     # lint
+Requires Node.js and npm. The guided demo needs Python 3.11+ and no extra
+packages.
+
+```sh
+cd cloudflare
+npm ci
+npm test -- --run          # Worker unit and integration tests
+npm run test:deployment    # Terraform and deployment checks
+npm run test:staging-origin
+npm run check:bindings
+npm run typecheck
+npm run build              # dashboard build + Wrangler dry run (no deploy)
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint + tests + the SPA build on every push/PR.
+Run the demo test suite (it sends no network requests) from the repository root:
 
-## Builds and releases
-
-When a `vX.Y.Z` tag is published, `.github/workflows/release.yml`:
-
-- Builds the **agent binaries** (PyInstaller) for `linux/amd64`, `linux/arm64`, and
-  `windows/amd64` and attaches them to the **GitHub Release**. The server serves them at
-  `GET /download/agent/{os-arch}`. Build recipe: [`moqesh/agent/BUILD.md`](moqesh/agent/BUILD.md).
-- Publishes the **multi-arch Docker image** (amd64/arm64) to **GHCR**
-  (`ghcr.io/juliourena/moqesh:<tag>` and `:latest`), with the linux agent binaries embedded.
-
-```bash
-# Run the published image:
-docker run -p 5000:5000 -p 8080:8080 -v moqesh-data:/app/data ghcr.io/juliourena/moqesh:latest
+```sh
+python3 -m unittest discover -s cloudflare/test -p 'demo_attack_test.py' -v
 ```
 
-Contributing: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+## Deploying
+
+Deployment is Terraform-driven. The customer owns the Cloudflare account, the
+zone, the Terraform state, the API tokens, and the Worker secrets. Every apply
+is reviewed from a saved plan. Roll out to a dedicated staging hostname first.
+Production routing needs its own reviewed and approved plan. Full procedure,
+required token permissions, rollback, and uninstall:
+[`cloudflare/README.md`](cloudflare/README.md#customer-owned-terraform-deployment).
+
+## Demo
+
+`cloudflare/scripts/demo_attack.py` walks through the full attack in eight
+operator-approved stages:
+
+1. normal visit
+2. missing key
+3. bait discovery
+4. key reuse
+5. maze `404`
+6. rabbit hole, hops 2–10
+7. block `403`
+8. manual unblock and recovery
+
+The script shows every request and response. This is a live exercise: it
+contains the IP you run it from. See
+[Guided attack demonstration](cloudflare/README.md#guided-attack-demonstration).
+
+## Known limitations
+
+- Containment is keyed on the IP address. Every user behind a shared NAT or VPN exit is affected together.
+- Webhook delivery is disabled in the current deployment.
+- Lure responses can be overridden by existing zone security rules (for
+  example, a WAF rule that returns `403` for `wp-config` paths).
+- During an update, the Worker deploys a few seconds before D1 migrations
+  finish running.
 
 ## License
 
-**AGPL-3.0-or-later**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). © 2026 Julio Ureña.
+**AGPL-3.0-or-later**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Based on Moqesh AI © 2026 Julio Ureña ([juliourena/moqesh](https://github.com/juliourena/moqesh)).
 
-Strong copyleft with a network clause: you may use, modify, and offer Animal Pot (even
-commercially), but if you distribute a modified version **or offer it as a network
-service**, you must publish its source code under AGPL-3.0 and retain attribution. For
-proprietary/closed-source use without those obligations, get in touch about a commercial license (dual licensing).
+Under the AGPL, if you distribute a modified version **or offer it as a
+network service**, you must publish its source code under AGPL-3.0 and keep
+this attribution.
