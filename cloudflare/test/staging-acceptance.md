@@ -161,6 +161,32 @@ are not a production guarantee.
 | Staging destroy plan reviewed and separately approved | Removes only module-owned resources | NOT RUN |
 | Teardown verified | DNS, external origin (if any), production Workers/routes, wildcard route, unrelated routes, and Access policies remain intact; private staging origin changes only as listed in the approved plan | NOT RUN |
 
+## Lure expansion update (2026-11-10)
+
+- First apply (`lures.tfplan`) failed safely with Cloudflare 412 "Actor
+  migration tag precondition failed": provider 5.28.1 does not keep the
+  applied `AgentSession` Durable Object migration in state. The live Worker
+  stayed unchanged. Fix: `agent_session_migration_applied = true` omits the
+  migration on later uploads.
+- Second apply (`lures2.tfplan`, operator-approved SHA-256 `392069e7…`)
+  succeeded. Worker updated, D1 migrations 0001–0004 recorded, all 11 earlier
+  events kept, new route CHECK and indexes in place, lure secret re-uploaded.
+- Live from host (IPv4, no key reuse): `/robots.txt` lists all 10 lure paths;
+  `/.env.production`, `/.git/config`, `/.aws/credentials`, `/config.json`,
+  `/backup.sql`, `/api/v1/keys` return 200 and leak the key; `/swagger.json`
+  returns 200 with no key.
+- `/wp-config.php.bak` (and `/wp-config.php`) returns Cloudflare's own 403
+  "Sorry, you have been blocked" page before the Worker runs, so a zone-level
+  security rule is catching it. The deploy token cannot read rulesets or
+  security analytics, so the exact rule is unconfirmed.
+- Browser containment: In the operator's browser (IPv6), `/config.json` was
+  fetched and its key reused at `/api/private/account` (200). A normal page
+  reload of `/` then returned 404 `{"error":"Not found"}`. The earlier "refresh
+  not blocked" report happened because the demo script (host IPv4) and browser
+  (IPv6) are different sources; containment is per IP.
+- Follow-up: on updates, the new Worker goes live about 2 seconds before D1
+  migrations run, so events on new routes can fail to save in that window.
+
 ## Findings and decision
 
 - Unresolved failures/limitations: Initial migration-helper result-count
