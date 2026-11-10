@@ -8,6 +8,8 @@ that probe for secrets get fake credentials, are pulled through a 10-hop
 Access-protected dashboard on a separate hostname shows the events and lets you
 unblock sources.
 
+![Diagram comparing app traffic with the Worker route off and on, plus the two-step deployment flow.](./worker-route-flows.svg)
+
 Everything below uses placeholder names. Replace them with your own:
 
 | Placeholder | Meaning |

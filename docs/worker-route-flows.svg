@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1120" viewBox="0 0 1440 1120" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">What changes when the Animal Pot Worker route is enabled?</title>
+  <desc id="diagram-desc">A generic comparison of requests going directly to an existing app while the public Worker route is off, versus all protected-hostname requests passing through Animal Pot when the route is on. Ordinary requests pass through, lure requests receive decoys, and decoy-key reuse enters a fake maze and is blocked. A separate admin hostname is protected by Cloudflare Access. The bottom shows bootstrap with the public route disabled, followed by a separately reviewed and approved route-enable plan.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52627a"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3168c5"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#18855b"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bb7413"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b63f48"/>
+    </marker>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #17243a; }
+      .title { font-size: 34px; font-weight: 750; }
+      .subtitle { font-size: 17px; fill: #52627a; }
+      .panel-title { font-size: 22px; font-weight: 700; }
+      .panel-subtitle { font-size: 14px; fill: #52627a; }
+      .node-title { font-size: 16px; font-weight: 700; }
+      .node-small { font-size: 13px; fill: #52627a; }
+      .flow-label { font-size: 13px; font-weight: 650; }
+      .card-title { font-size: 21px; font-weight: 700; }
+      .body { font-size: 15px; fill: #394a62; }
+      .small { font-size: 13px; fill: #52627a; }
+      .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; font-weight: 650; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1120" rx="0" fill="#f3f6fb"/>
+  <text x="54" y="58" class="title">What changes when the Worker route is enabled?</text>
+  <text x="56" y="91" class="subtitle">Your app stays in place. The route changes how requests reach it.</text>
+  <rect x="1220" y="39" width="164" height="34" rx="17" fill="#e2e9f4"/>
+  <text x="1302" y="61" text-anchor="middle" class="small" font-weight="700">GENERIC EXAMPLE</text>
+
+  <rect x="40" y="125" width="610" height="500" rx="18" fill="#ffffff" stroke="#cbd6e5" stroke-width="2"/>
+  <rect x="40" y="125" width="610" height="8" rx="4" fill="#718096"/>
+  <text x="72" y="176" class="panel-title">1. Route OFF — before activation</text>
+  <text x="72" y="203" class="panel-subtitle">No public Worker route is attached to the protected hostname.</text>
+
+  <rect x="75" y="270" width="145" height="86" rx="13" fill="#edf2f8" stroke="#aab8ca" stroke-width="1.5"/>
+  <text x="147" y="306" text-anchor="middle" class="node-title">Browser</text>
+  <text x="147" y="330" text-anchor="middle" class="node-small">visitor / scanner</text>
+
+  <line x1="220" y1="313" x2="263" y2="313" stroke="#52627a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="270" y="270" width="175" height="86" rx="13" fill="#edf2f8" stroke="#aab8ca" stroke-width="1.5"/>
+  <text x="357" y="302" text-anchor="middle" class="node-title">Cloudflare</text>
+  <text x="357" y="327" text-anchor="middle" class="node-small">DNS / proxy</text>
+
+  <line x1="445" y1="313" x2="480" y2="313" stroke="#52627a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="487" y="270" width="135" height="86" rx="13" fill="#e9f5ee" stroke="#70b48f" stroke-width="1.5"/>
+  <text x="554" y="301" text-anchor="middle" class="node-title">Existing</text>
+  <text x="554" y="323" text-anchor="middle" class="node-title">app origin</text>
+  <text x="554" y="344" text-anchor="middle" class="node-small">your website</text>
+
+  <rect x="75" y="405" width="547" height="75" rx="12" fill="#f4f6f9"/>
+  <circle cx="102" cy="442" r="13" fill="#718096"/>
+  <path d="M96 442l4 4 8-9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="127" y="436" class="node-title">Traffic stays on its current path</text>
+  <text x="127" y="460" class="body">Requests reach the existing app; Animal Pot does not inspect them.</text>
+
+  <rect x="75" y="505" width="547" height="76" rx="12" fill="#f8fafc" stroke="#d7e0eb"/>
+  <text x="95" y="536" class="node-title">No app redesign or code edit</text>
+  <text x="95" y="560" class="body">The public site behaves as it did before this route is attached.</text>
+
+  <rect x="670" y="125" width="730" height="500" rx="18" fill="#ffffff" stroke="#b8c8ed" stroke-width="2"/>
+  <rect x="670" y="125" width="730" height="8" rx="4" fill="#386bc2"/>
+  <text x="702" y="176" class="panel-title">2. Route ON — after separate approval</text>
+  <rect x="1150" y="145" width="220" height="45" rx="12" fill="#e8efff"/>
+  <text x="1260" y="164" text-anchor="middle" class="code" font-size="12" fill="#244f9d">protected-hostname/*</text>
+  <text x="1260" y="181" text-anchor="middle" class="small" fill="#244f9d">every request enters Worker</text>
+  <text x="702" y="203" class="panel-subtitle">Every request to this hostname enters the Worker first.</text>
+
+  <rect x="700" y="232" width="120" height="66" rx="12" fill="#edf2f8" stroke="#aab8ca" stroke-width="1.5"/>
+  <text x="760" y="261" text-anchor="middle" class="node-title">Browser</text>
+  <text x="760" y="282" text-anchor="middle" class="node-small">any request</text>
+  <line x1="820" y1="265" x2="848" y2="265" stroke="#3168c5" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <rect x="855" y="232" width="145" height="66" rx="12" fill="#edf2f8" stroke="#aab8ca" stroke-width="1.5"/>
+  <text x="927" y="260" text-anchor="middle" class="node-title">Cloudflare</text>
+  <text x="927" y="282" text-anchor="middle" class="node-small">DNS / proxy</text>
+  <line x1="1000" y1="265" x2="1024" y2="265" stroke="#3168c5" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <rect x="1031" y="222" width="195" height="86" rx="14" fill="#e9efff" stroke="#6688d0" stroke-width="2"/>
+  <text x="1128" y="258" text-anchor="middle" class="node-title">Animal Pot Worker</text>
+  <text x="1128" y="282" text-anchor="middle" class="node-small">checks request + source</text>
+
+  <text x="702" y="339" class="flow-label" fill="#52627a">WORKER OUTCOMES</text>
+  <line x1="1128" y1="308" x2="1128" y2="326" stroke="#52627a" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="700" y="352" width="160" height="44" rx="10" fill="#edf2f8"/>
+  <text x="780" y="380" text-anchor="middle" class="flow-label">Normal request</text>
+  <line x1="860" y1="374" x2="890" y2="374" stroke="#18855b" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <rect x="898" y="352" width="310" height="44" rx="10" fill="#e9f5ee" stroke="#abd3bc"/>
+  <text x="1053" y="380" text-anchor="middle" class="flow-label">Pass through to existing app origin</text>
+
+  <rect x="700" y="406" width="160" height="44" rx="10" fill="#fff4dd"/>
+  <text x="780" y="434" text-anchor="middle" class="flow-label">Lure request</text>
+  <line x1="860" y1="428" x2="890" y2="428" stroke="#bb7413" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+  <rect x="898" y="406" width="310" height="44" rx="10" fill="#fff4dd" stroke="#e7c77f"/>
+  <text x="1053" y="434" text-anchor="middle" class="flow-label">Return a synthetic decoy</text>
+
+  <rect x="700" y="460" width="160" height="58" rx="10" fill="#fff0e6"/>
+  <text x="780" y="484" text-anchor="middle" class="flow-label">Decoy-key</text>
+  <text x="780" y="503" text-anchor="middle" class="flow-label">reuse</text>
+  <line x1="860" y1="489" x2="890" y2="489" stroke="#b63f48" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <rect x="898" y="460" width="310" height="58" rx="10" fill="#fff0e6" stroke="#e4aaa6"/>
+  <text x="1053" y="484" text-anchor="middle" class="flow-label">Maze → fake API → blocked from app</text>
+  <text x="1053" y="504" text-anchor="middle" class="node-small">source cannot reach the real site</text>
+
+  <line x1="1226" y1="265" x2="1250" y2="265" stroke="#52627a" stroke-width="2" stroke-dasharray="5 5"/>
+  <text x="1271" y="245" text-anchor="middle" class="small">Only expected traffic</text>
+  <text x="1271" y="265" text-anchor="middle" class="small">is passed through</text>
+  <text x="1271" y="285" text-anchor="middle" class="small">to the origin.</text>
+
+  <rect x="700" y="543" width="180" height="43" rx="10" fill="#f1edff" stroke="#c9b9f1"/>
+  <text x="790" y="570" text-anchor="middle" class="flow-label">admin.example.com</text>
+  <line x1="880" y1="564" x2="908" y2="564" stroke="#6d55ad" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="916" y="543" width="158" height="43" rx="10" fill="#f1edff" stroke="#c9b9f1"/>
+  <text x="995" y="570" text-anchor="middle" class="flow-label">Cloudflare Access</text>
+  <line x1="1074" y1="564" x2="1102" y2="564" stroke="#6d55ad" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="1110" y="543" width="258" height="43" rx="10" fill="#f1edff" stroke="#c9b9f1"/>
+  <text x="1239" y="570" text-anchor="middle" class="flow-label">Private Worker dashboard</text>
+
+  <text x="54" y="680" class="panel-title">How activation is staged</text>
+  <text x="54" y="706" class="panel-subtitle">Bootstrap does not attach the public app route. Route activation is a separate reviewed change.</text>
+
+  <rect x="40" y="730" width="660" height="245" rx="18" fill="#ffffff" stroke="#cbd6e5" stroke-width="2"/>
+  <circle cx="83" cy="777" r="22" fill="#52627a"/>
+  <text x="83" y="784" text-anchor="middle" font-size="18" font-weight="750" fill="#ffffff">1</text>
+  <text x="120" y="785" class="card-title">Bootstrap — public route stays OFF</text>
+  <rect x="74" y="812" width="268" height="37" rx="9" fill="#f0f3f8"/>
+  <text x="92" y="836" class="code">enable_public_route = false</text>
+  <text x="75" y="881" class="body">Creates the Worker, data resources, and Access-protected</text>
+  <text x="75" y="904" class="body">admin route. Public app traffic is unchanged.</text>
+  <text x="75" y="944" class="small">Review and approve the bootstrap plan before applying.</text>
+
+  <rect x="720" y="730" width="680" height="245" rx="18" fill="#ffffff" stroke="#aebfe7" stroke-width="2"/>
+  <circle cx="763" cy="777" r="22" fill="#386bc2"/>
+  <text x="763" y="784" text-anchor="middle" font-size="18" font-weight="750" fill="#ffffff">2</text>
+  <text x="800" y="785" class="card-title">Enable — attach the public Worker route</text>
+  <rect x="754" y="812" width="260" height="37" rx="9" fill="#e8efff"/>
+  <text x="772" y="836" class="code">enable_public_route = true</text>
+  <text x="755" y="881" class="body">Create a new saved plan; inspect and explicitly approve it;</text>
+  <text x="755" y="904" class="body">then apply to attach protected-hostname/*.</text>
+  <text x="755" y="944" class="small">This route affects every request to the protected hostname.</text>
+
+  <rect x="40" y="995" width="1360" height="79" rx="14" fill="#fff7e6" stroke="#e8cd90" stroke-width="1.5"/>
+  <path d="M72 1018 L83 1040 L61 1040 Z" fill="#bd7a17"/>
+  <text x="72" y="1037" text-anchor="middle" font-size="13" font-weight="800" fill="#ffffff">!</text>
+  <text x="100" y="1027" class="node-title">Changing traffic, not changing your app</text>
+  <text x="100" y="1051" class="body">Disabling the route also requires its own reviewed Terraform plan. This generic diagram does not report live account status.</text>
+</svg>
