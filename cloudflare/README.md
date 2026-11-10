@@ -140,12 +140,15 @@ for the DNS change separately from approval of each Terraform plan:
 | CNAME | `staging` (`staging.kurocyber.com`) | `kurocyber.com` | Proxied (orange cloud) |
 | CNAME | `admin-staging` (`admin-staging.kurocyber.com`) | `kurocyber.com` | Proxied (orange cloud) |
 
-Do not alter, replace, or delete the existing wildcard DNS record or route.
-While the exact staging route is enabled, it takes precedence for
-`staging.kurocyber.com`. If that route is later disabled or removed, the
-unchanged `*.kurocyber.com/*` route becomes applicable again; do not assume
-requests then reach the private static origin or describe that as origin
-recovery. Verify and document the actual fallback before any route rollback.
+Do not alter, replace, or delete unrelated DNS records or routes, including
+any wildcard records/routes that exist. Do not create a wildcard route as a
+deployment prerequisite. While the exact staging route is enabled, it takes
+precedence for `staging.kurocyber.com`. If that route is later disabled or
+removed, an existing matching wildcard route may become applicable; otherwise
+the current DNS/custom-domain/origin configuration determines the fallback.
+The latest pre-deployment discovery found no zone Worker routes. Neither case
+restores the private static origin. Verify and document the actual fallback
+before any route rollback.
 
 Use one access-controlled HCP Terraform workspace and remote state per
 Cloudflare account plus installation ID. That workspace/state is the **sole
@@ -203,7 +206,10 @@ npm run build
 
 The binding check compares the Wrangler local configuration against Terraform,
 including the `ORIGIN`, `AGENT_SESSIONS`, `EVENTS_DB`, assets, runtime variables,
-`BAIT_API_PATH`, and secret binding names. The Wrangler D1 ID is intentionally a
+`BAIT_API_PATH`, and secret binding names. Both the application Worker and the
+private static-origin Worker must declare their own `ASSETS` binding with
+type `assets`; uploading asset files alone does not provide `env.ASSETS`.
+The Wrangler D1 ID is intentionally a
 local-test placeholder; Terraform and the migration runner use the real
 `cloudflare_d1_database.events.id` output and reject that placeholder.
 
@@ -213,15 +219,23 @@ secrets in Wrangler `vars`, `.tfvars`, source control, or test fixtures.
 
 ### State, credentials, and secrets
 
-Use the declared HCP Terraform Cloud backend with a **remote, access-controlled
-workspace**. Initialize it with the organization's workspace:
+Use the declared HCP Terraform `cloud` integration with a **remote,
+access-controlled workspace**. Select the existing organization and workspace
+through environment variables, and supply the user token securely through
+`TF_TOKEN_app_terraform_io` (never a command-line argument):
 
 ```sh
 cd cloudflare/terraform
-terraform init \
-  -backend-config="organization=YOUR_TERRAFORM_CLOUD_ORG" \
-  -backend-config="workspaces.name=YOUR_ACCOUNT_INSTALLATION_WORKSPACE"
+export TF_CLOUD_ORGANIZATION=YOUR_TERRAFORM_CLOUD_ORG
+export TF_WORKSPACE=YOUR_ACCOUNT_INSTALLATION_WORKSPACE
+terraform init -input=false
 ```
+
+Use the organization name, not its `org-...` identifier. An empty `cloud {}`
+block reads these environment variables; `backend "cloud"` is not a supported
+Terraform backend and `-backend-config` does not configure this integration.
+Verify that the workspace exists and has no unexpected state before
+initialization; stop rather than migrating unrelated state.
 
 Configure that workspace for **local execution** so Terraform can read the
 locally built Worker bundle/assets and run the checked-in D1/secret provisioning
@@ -358,6 +372,9 @@ The staged migrations run through the Terraform apply's local D1 API helper,
 with the real database ID supplied by Terraform. Do not run Wrangler's local
 placeholder database against production or run its local migration workflow
 against the customer database.
+The helper checks success for every returned SQL statement and verifies the
+migration ledger. If an apply stops after a migration was committed, review
+a fresh recovery plan: the ledger skips already applied migration files.
 
 ### Updates, rollback, and uninstall
 
@@ -369,12 +386,12 @@ against the customer database.
   subsequently change runtime settings; Terraform does not overwrite existing
   dashboard settings on routine applies.
 - For rollback, first plan and approve removal of the public route by setting
-  `enable_public_route = false`. For Kurocyber staging, account for the
-  unchanged wildcard route becoming applicable again and verify the actual
-  fallback; disabling the exact route does not restore the private static
-  origin. Then plan and approve a Worker code/assets rollback. Preserve D1 and
-  its data unless a separately reviewed retention/backup decision authorizes
-  removal.
+  `enable_public_route = false`. Rediscover matching routes, DNS, and custom
+  domains and verify the actual fallback; do not assume a wildcard route
+  exists or recreate one. Disabling the exact route does not restore the
+  private static origin. Then plan and approve a Worker code/assets rollback.
+  Preserve D1 and its data unless a separately reviewed retention/backup
+  decision authorizes removal.
 - For uninstall, inspect a saved Terraform plan and confirm it removes only
   this deployment's two Worker routes, Access application, Worker/subdomain,
   D1 database, and associated managed resources. Back up any required D1 data.

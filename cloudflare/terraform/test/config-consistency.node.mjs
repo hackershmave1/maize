@@ -91,6 +91,30 @@ const resourceBody = (terraform, type, name) =>
 const variableBody = (terraform, name) =>
   terraform.match(new RegExp(`variable "${name}" \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? "";
 
+nodeTest("HCP state uses the supported cloud integration and environment-based workspace selection", async () => {
+  const versions = await terraformFile("versions.tf");
+  assert.match(versions, /\bcloud\s*\{\s*\}/);
+  assert.doesNotMatch(versions, /\bbackend\s+"cloud"/);
+  const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
+  assert.match(readme, /TF_CLOUD_ORGANIZATION=/);
+  assert.match(readme, /TF_WORKSPACE=/);
+  assert.doesNotMatch(readme, /-backend-config=/);
+});
+
+nodeTest("dashboard assets must be bound on the application Worker, not only the staging origin", async () => {
+  const main = await terraformFile("main.tf");
+  const app = resourceBody(main, "cloudflare_workers_script", "app");
+  assert.match(app, /\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/);
+  const invalidApps = [
+    app.replace(/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\},?/, ""),
+    app.replace(/type\s*=\s*"assets"/, 'type = "plain_text"'),
+  ];
+  for (const invalid of invalidApps) {
+    const errors = configModule.checkDeploymentBindings({}, main.replace(app, invalid));
+    assert.ok(errors.some((error) => /dashboard.*ASSETS.*assets/.test(error)));
+  }
+});
+
 nodeTest("staging origin is opt-in and uploads only the configured private static Worker", async () => {
   const main = await terraformFile("main.tf");
   const origin = resourceBody(main, "cloudflare_workers_script", "staging_origin");

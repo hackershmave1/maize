@@ -146,9 +146,10 @@ async function d1Batch({ accountId, databaseId, queries, token, fetcher }) {
     },
   );
   const payload = await readApiResponse(response);
+  // D1 returns one result per SQL statement, including multi-statement queries.
   return Array.isArray(payload.result)
-    && payload.result.length === queries.length
-    && payload.result.every((item) => item.success !== false);
+    && payload.result.length >= queries.length
+    && payload.result.every((item) => item?.success === true);
 }
 
 async function readApiResponse(response) {

@@ -216,6 +216,10 @@ resource "cloudflare_workers_script" "app" {
   }
   bindings = [
     {
+      name = "ASSETS"
+      type = "assets"
+    },
+    {
       name        = "ORIGIN"
       type        = "service"
       service     = var.create_staging_origin ? cloudflare_workers_script.staging_origin[0].script_name : var.origin_service_name

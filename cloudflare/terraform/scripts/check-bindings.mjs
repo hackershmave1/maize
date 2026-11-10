@@ -42,7 +42,14 @@ export function checkDeploymentBindings(wrangler, terraform) {
   if (wrangler.assets?.binding !== "ASSETS") {
     errors.push("Wrangler local assets must use the ASSETS binding.");
   }
-  if (!/assets\s*=\s*\{[\s\S]*?directory\s*=\s*"\$\{path\.module\}\/\.\.\/dashboard\/dist"[\s\S]*?run_worker_first\s*=\s*true/.test(terraform)) {
+  const app = terraform.match(
+    /resource\s+"cloudflare_workers_script"\s+"app"\s*\{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  const appBindings = app.match(/\bbindings\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  if (!/\{\s*name\s*=\s*"ASSETS"\s*type\s*=\s*"assets"\s*\}/.test(appBindings)) {
+    errors.push("Terraform dashboard Worker must declare ASSETS in bindings with type assets (provider 5.28.1).");
+  }
+  if (!/assets\s*=\s*\{[\s\S]*?directory\s*=\s*"\$\{path\.module\}\/\.\.\/dashboard\/dist"[\s\S]*?run_worker_first\s*=\s*true/.test(app)) {
     errors.push("Terraform must upload dashboard/dist with run_worker_first enabled.");
   }
   const stagingOrigin = terraform.match(

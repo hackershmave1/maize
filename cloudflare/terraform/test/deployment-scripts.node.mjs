@@ -79,12 +79,16 @@ nodeTest("D1 migration runner applies and verifies all schema migrations against
       assert.match(migrationQuery.sql, /CREATE TABLE|ALTER TABLE/);
       assert.match(recordQuery.sql, /INSERT INTO __moqesh_schema_migrations/);
       migrationNames.push(recordQuery.params[0]);
-      return apiResponse([{ results: [] }, { results: [] }]);
+      return apiResponse([
+        { success: true, results: [] },
+        { success: true, results: [] },
+        { success: true, results: [] },
+      ]);
     }
     throw new Error(`Unexpected SQL request: ${body.sql}`);
   };
 
-  await migrationModule.applyD1Migrations({
+  const options = {
     accountId: "a".repeat(32),
     databaseId: "12345678-1234-1234-1234-123456789abc",
     migrationsDirectory: new URL("../../migrations/", import.meta.url),
@@ -98,7 +102,8 @@ nodeTest("D1 migration runner applies and verifies all schema migrations against
     },
     token: "not-a-real-token",
     fetcher,
-  });
+  };
+  await migrationModule.applyD1Migrations(options);
 
   assert.deepEqual(migrationNames, [
     "0001_events.sql",
@@ -114,6 +119,43 @@ nodeTest("D1 migration runner applies and verifies all schema migrations against
       const body = JSON.parse(init.body);
       return (body.batch ?? [body]).some((query) => query.sql === migration);
     }));
+  }
+  const appliedBatchCount = requests.filter(({ init }) => JSON.parse(init.body).batch).length;
+  await migrationModule.applyD1Migrations(options);
+  assert.equal(
+    requests.filter(({ init }) => JSON.parse(init.body).batch).length,
+    appliedBatchCount,
+  );
+});
+
+nodeTest("D1 migration runner rejects incomplete or unconfirmed batch results", async () => {
+  for (const result of [
+    [],
+    [{ success: true }],
+    [{ success: true }, { success: false }],
+    [{ success: true }, {}],
+  ]) {
+    await assert.rejects(
+      migrationModule.applyD1Migrations({
+        accountId: "a".repeat(32),
+        databaseId: "12345678-1234-1234-1234-123456789abc",
+        migrationsDirectory: new URL("../../migrations/", import.meta.url),
+        installationId: "installation-test",
+        settings: {
+          mazeDurationMinutes: 15,
+          blockDurationHours: 24,
+          responseBudget: 100,
+          alertGroupingMinutes: 5,
+          retentionDays: 30,
+        },
+        token: "not-a-real-token",
+        fetcher: async (_url, init) => {
+          const body = JSON.parse(init.body);
+          return apiResponse(body.batch ? result : [{ results: [] }]);
+        },
+      }),
+      /Cloudflare did not confirm migration 0001_events\.sql/,
+    );
   }
 });
 

@@ -200,17 +200,18 @@ After an approved apply, verify without changing state:
   deleted.
 - Terraform state contains resource metadata and secret binding names, not
   `LURE_KEY_SECRET`, `ALERT_WEBHOOK_URL`, or the Cloudflare API token.
-- If the exact staging route is disabled or removed, the unchanged
-  `*.kurocyber.com/*` route becomes applicable again. Do not claim that this
-  restores the private static origin; verify and report the actual fallback
-  before any route rollback.
+- If the exact staging route is disabled or removed, rediscover matching
+  routes, DNS, and custom domains to determine the fallback. A wildcard route
+  might not exist; do not create one. Do not claim that route removal restores
+  the private static origin; verify and report the actual fallback before any
+  route rollback.
 
 ## 5. Rollback and teardown ownership
 
 For rollback, first show a plan that disables/removes only the public route,
-wait for approval, and apply through Terraform. For Kurocyber staging, account
-for the unchanged wildcard route becoming applicable again and verify the
-actual fallback; do not assume traffic is back at the private static origin.
+wait for approval, and apply through Terraform. For Kurocyber staging, verify
+the actual fallback against current routes, DNS, and custom domains; do not
+assume a wildcard exists or traffic is back at the private static origin.
 Preserve D1 data unless a separately approved backup and retention decision
 authorizes deletion.
 
