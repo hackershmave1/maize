@@ -2,14 +2,14 @@
 
 ## Goal
 
-Allow the isolated Kurocyber staging installation to be deployed and tested
+Allow an isolated staging installation to be deployed and tested
 before an alert destination is available, without weakening request handling
 or losing event history.
 
 ## Chosen approach
 
 Add a Terraform `alert_webhook_enabled` setting, defaulting to `true` to preserve
-existing deployments. Set it to `false` only in the Kurocyber staging example.
+existing deployments. Set it to `false` only in the isolated staging example.
 When disabled, the Worker persists lure events to D1 and continues normal
 containment behavior, but does not create webhook outbox jobs or attempt
 outbound webhook delivery. Scheduled maintenance still performs retention

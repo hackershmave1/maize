@@ -221,7 +221,7 @@ nodeTest("secret provisioner uploads and verifies only the lure key when webhook
 
   await secretModule.provisionWorkerSecrets({
     accountId: "a".repeat(32),
-    scriptName: "moqesh-kurocyber-staging",
+    scriptName: "moqesh-example-staging",
     token: "not-a-real-token",
     lureKeySecret: "local-test-secret-0123456789-abcdefgh",
     alertWebhookEnabled: false,
@@ -241,7 +241,7 @@ nodeTest("secret provisioner uploads and verifies only the lure key when webhook
     text: "local-test-secret-0123456789-abcdefgh",
   });
   assert.equal(calls.length, 2);
-  assert.match(calls[1].url, /\/workers\/scripts\/moqesh-kurocyber-staging\/secrets$/);
+  assert.match(calls[1].url, /\/workers\/scripts\/moqesh-example-staging\/secrets$/);
 });
 
 nodeTest("disabled secret provisioner still rejects a weak lure key before making API calls", async () => {
@@ -251,7 +251,7 @@ nodeTest("disabled secret provisioner still rejects a weak lure key before makin
   await assert.rejects(
     secretModule.provisionWorkerSecrets({
       accountId: "a".repeat(32),
-      scriptName: "moqesh-kurocyber-staging",
+      scriptName: "moqesh-example-staging",
       token: "not-a-real-token",
       lureKeySecret: "too-short",
       alertWebhookEnabled: false,

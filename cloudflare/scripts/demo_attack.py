@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator-paced demo against the dedicated Moqesh staging deployment."""
+"""Operator-paced demo against your explicitly selected isolated staging deployment."""
 
 import argparse
 import ipaddress
@@ -12,8 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-BASE_URL = "https://staging.kurocyber.com"
-ADMIN_URL = "https://admin-staging.kurocyber.com"
+BASE_URL = "https://staging.example.com"
+ADMIN_URL = "https://admin-staging.example.com"
 BAIT_PATH = "/api/private/account"
 TRACE_PATH = "/cdn-cgi/trace"
 HOP_PATHS = (
@@ -276,7 +276,7 @@ def run_demo(
         BAIT_PATH,
         "HTTP 200 fake account data, readonly=true, and a next lead (hop 1 of 10); starts containment.",
         "In Detections, refresh to inspect confirmed reuse. In Containment, refresh to inspect this "
-        "source. Webhook delivery is disabled in this staging deployment.",
+        "source. Check webhook results separately if alerts are enabled for your installation.",
         confirm_reuse,
         headers={**base_headers, "Authorization": "Bearer " + key},
     )
@@ -378,12 +378,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--base-url", type=https_origin, default=BASE_URL, help="Protected hostname origin (default: %(default)s)"
+        "--base-url", type=https_origin, required=True, help="Protected staging hostname origin (required)"
     )
-    parser.add_argument(
-        "--admin-url", type=https_origin, default=ADMIN_URL, help="Admin dashboard origin (default: %(default)s)"
-    )
+    parser.add_argument("--admin-url", type=https_origin, required=True, help="Admin dashboard origin (required)")
     args = parser.parse_args(argv)
+    if args.base_url == args.admin_url:
+        parser.error("--admin-url must differ from --base-url")
     BASE_URL, ADMIN_URL = args.base_url, args.admin_url
     if not sys.stdin.isatty():
         print("ERROR: run in an interactive terminal; unattended/piped approval is not supported.", file=sys.stderr)

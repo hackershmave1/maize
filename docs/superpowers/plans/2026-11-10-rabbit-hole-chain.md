@@ -10,7 +10,7 @@
 
 Spec: `docs/superpowers/specs/2026-11-10-rabbit-hole-chain-design.md`.
 
-Run commands from `cloudflare/` in `/home/shay/Projects/moqesh/.worktrees/cloudflare-merge`, except Python commands, which run from the repository root.
+Run commands from `cloudflare/` in your feature worktree, except Python commands, which run from the repository root.
 
 ---
 
@@ -1095,10 +1095,10 @@ git commit -m "docs: describe the rabbit-hole chain and migration 0005"
 
 - [ ] **Step 1: Plan**
 
-From `cloudflare/terraform`, export the environment from the protected files in `/home/shay/.config/moqesh-deploy/`, as in the README's local-execution section. Then:
+From `cloudflare/terraform`, load your protected deployment environment, as in the README's local-execution section. Then:
 
 ```bash
-terraform plan -var-file=kurocyber-staging.tfvars -out=rabbit.tfplan
+terraform plan -var-file=staging.tfvars -out=rabbit.tfplan
 sha256sum rabbit.tfplan
 ```
 

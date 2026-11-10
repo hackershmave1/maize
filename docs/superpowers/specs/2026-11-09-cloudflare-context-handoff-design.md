@@ -3,6 +3,11 @@
 **Status:** Approved for documentation work
 **Date:** 2026-11-09
 
+This is a historical handoff proposal, not current deployment status. Some
+proposed source-document copies were never added to this repository. Use the
+current deployment guide, Cloudflare README, and anonymized staging record
+instead of treating the original locations or status below as current.
+
 ## Goal
 
 Make the approved Cloudflare deployment architecture, implementation record,
@@ -40,11 +45,10 @@ staging zone, protected credentials, a reviewed plan, and explicit approval.
 
 ## Copilot workspace guidance
 
-The code and copied docs belong to the `feat/cloudflare-deployment` worktree at
-`/home/shay/Projects/moqesh/.worktrees/cloudflare-deployment`. Instruct users
-to open that directory in VS Code when they need Copilot to reason over the
-implementation. Do not imply that the parent clone on `chore/ignore-worktrees`
-contains or activates this feature branch.
+The code and documentation must be opened from the checkout containing the
+Cloudflare implementation. Do not assume that a parent clone and a feature
+worktree contain the same branch or files. No developer-specific filesystem
+location is required.
 
 ## Non-goals
 

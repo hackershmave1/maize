@@ -1,5 +1,10 @@
 # Deploying Animal Pot in front of your app
 
+**The best defense is a good offense.**
+
+Here, offense means defensive deception on infrastructure you are authorized
+to protect, not attacking anyone else's systems.
+
 This guide takes you from zero to a working Animal Pot installation on your own
 Cloudflare account. Animal Pot runs as a Cloudflare Worker in front of an
 existing website: ordinary visitors reach your site unchanged, while scanners
@@ -7,8 +12,6 @@ that probe for secrets get fake credentials, are pulled through a 10-hop
 "rabbit hole" of fake API data, and are then blocked from the real site. An
 Access-protected dashboard on a separate hostname shows the events and lets you
 unblock sources.
-
-![Diagram comparing app traffic with the Worker route off and on, plus the two-step deployment flow.](./worker-route-flows.svg)
 
 Everything below uses placeholder names. Replace them with your own:
 
