@@ -74,6 +74,57 @@ previously provisioned, it remains stored but is unused while delivery is
 disabled. Any unexpired outbox entries already present are retained and may be
 retried if delivery is enabled again.
 
+## Guided attack demonstration
+
+From the repository root, run the dependency-free Python 3.11+ walkthrough:
+
+```sh
+python3 cloudflare/scripts/demo_attack.py
+```
+
+Keep `https://admin-staging.kurocyber.com` open and sign in before starting.
+The script targets **only** `https://staging.kurocyber.com`; it cannot be pointed
+at the production website. Each of six stages shows the request URL, headers,
+empty request body, expected result, HTTP status, selected response headers,
+and response body. Long responses are explicitly truncated. Type uppercase
+`NEXT` to authorize each individual request; `QUIT`, Ctrl-C, or EOF stops.
+Piped/unattended input is rejected.
+
+Containment is keyed on the **public source IP**, not the browser. A preflight
+step shows the IP Cloudflare sees for the script. Open
+`https://staging.kurocyber.com/cdn-cgi/trace` in the browser you plan to refresh
+and compare the `ip=` line. If the script runs on a different machine (for
+example a Linux VS Code remote host) or uses IPv4 while the browser uses IPv6,
+the browser will still see the game after Stage 5. In that case, run the
+script on the browser's machine, or demonstrate the browser refresh from a
+browser on the script's host.
+
+The stages are normal browsing, missing-key rejection, synthetic credential
+discovery, synthetic-key reuse, maze diversion, and recovery after manual
+unblock. The synthetic key is deliberately visible in the lure response and
+reuse request; do not substitute real credentials. No deployment tokens or
+extra packages are required. The script does not follow redirects, retry
+requests, exhaust rate limits, or make authenticated admin requests.
+
+This is a **live staging exercise**, not a dry run: events persist, and reuse
+contains the source public IP. Everyone sharing that IP may be affected;
+incognito does not isolate a source. Before starting, unblock the demo source
+and ensure it is not allowlisted. Stay on the same connection throughout.
+In the final stage, use **Containment > Unblock** in the dashboard before typing
+`NEXT`; the script then verifies that the runner returns. Cancellation after
+confirmation does not clear containment. Refresh Detections/Containment at
+the indicated checkpoints and inspect the unblock audit entry yourself.
+Webhook delivery remains disabled for this deployment. The script verifies
+HTTP behavior, not dashboard persistence, timed expiry, or cross-source reuse.
+
+Offline script regression tests (no staging requests), from the repository root:
+
+```sh
+python3 -m unittest discover -s cloudflare/test -p 'demo_attack_test.py' -v
+```
+
+## Local Worker validation
+
 From this directory:
 
 ```sh
