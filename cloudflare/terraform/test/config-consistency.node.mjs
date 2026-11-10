@@ -321,3 +321,18 @@ nodeTest("Terraform lure path lists match the Worker's disclosure lures", async 
     assert.deepEqual(listed, [...workerPaths, bait]);
   }
 });
+
+nodeTest("AgentSession migration is sent only until it has been applied", async () => {
+  const [mainText, variablesText] = await Promise.all([
+    readFile(new URL("../main.tf", import.meta.url), "utf8"),
+    readFile(new URL("../variables.tf", import.meta.url), "utf8"),
+  ]);
+  assert.match(
+    mainText,
+    /migrations = var\.agent_session_migration_applied \? null : \{\s*new_tag\s*= "v1"\s*new_sqlite_classes = \["AgentSession"\]\s*\}/,
+  );
+  assert.match(
+    variablesText,
+    /variable "agent_session_migration_applied" \{[^}]*type\s*= bool\s*default\s*= false/,
+  );
+});

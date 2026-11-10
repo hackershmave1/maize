@@ -46,7 +46,10 @@ Runtime settings and the operator allowlist are stored in D1. The admin and
 containment-index migrations (`migrations/0002_admin.sql` and
 `migrations/0003_containment_sources.sql`) and the expanded lure-route migration
 (`migrations/0004_more_lure_routes.sql`) must be applied before attaching the
-Worker route. Retention can be reduced from the 30-day maximum; event source
+Worker route. The AgentSession Durable Object migration (tag `v1`) is sent only
+while `agent_session_migration_applied = false`; set it to `true` after the
+first successful apply, because Cloudflare rejects a resent `v1` migration with
+HTTP 412 ("Actor migration tag precondition failed") on later Worker updates. Retention can be reduced from the 30-day maximum; event source
 IPs, event history, audit records, and webhook payloads expire within that
 window. A separate minimal containment index keeps a source discoverable until
 its Durable Object's recorded block expiry, even if its events expire first.

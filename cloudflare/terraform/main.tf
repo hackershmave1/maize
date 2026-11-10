@@ -210,7 +210,8 @@ resource "cloudflare_workers_script" "app" {
       not_found_handling = "single-page-application"
     }
   }
-  migrations = {
+  # Provider v5 does not track migrations in state; resending v1 after it exists is rejected (HTTP 412).
+  migrations = var.agent_session_migration_applied ? null : {
     new_tag            = "v1"
     new_sqlite_classes = ["AgentSession"]
   }

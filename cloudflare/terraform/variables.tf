@@ -55,6 +55,12 @@ variable "create_staging_origin" {
   default     = false
 }
 
+variable "agent_session_migration_applied" {
+  description = "Set true after the first successful apply has created the AgentSession Durable Object (migration tag v1). Later Worker uploads must omit the already-applied migration."
+  type        = bool
+  default     = false
+}
+
 variable "origin_service_name" {
   description = "Existing customer origin Worker service name; may be empty when create_staging_origin selects the managed origin. Terraform does not manage external origins."
   type        = string
