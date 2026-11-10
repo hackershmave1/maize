@@ -146,7 +146,7 @@ nodeTest("staging hostname binding is required by the checker and configured for
     assert.ok(errors.some((error) => /staging origin.*STAGING_HOSTNAME.*protected_hostname/.test(error)));
   }
   const local = JSON.parse(await readFile(new URL("../../staging-origin/wrangler.jsonc", import.meta.url), "utf8"));
-  assert.equal(local.vars?.STAGING_HOSTNAME, "staging.kurocyber.com");
+  assert.equal(local.vars?.STAGING_HOSTNAME, "staging.example.com");
   assert.equal(local.assets.run_worker_first, true);
 });
 
@@ -269,15 +269,15 @@ nodeTest("binding checker rejects missing or unsafe staging origin subdomain con
   }
 });
 
-nodeTest("examples keep production defaults safe and isolate the approved Kurocyber staging resources", async () => {
+nodeTest("examples keep production defaults safe and isolate staging resources", async () => {
   const basic = await terraformFile("examples/basic.tfvars.example");
   assert.match(basic, /^create_staging_origin\s*=\s*false$/m);
-  const staging = await terraformFile("examples/kurocyber-staging.tfvars.example");
+  const staging = await terraformFile("examples/staging.tfvars.example");
   const expected = {
-    protected_hostname: '"staging.kurocyber.com"',
-    admin_hostname: '"admin-staging.kurocyber.com"',
-    worker_name: '"moqesh-kurocyber-staging"',
-    d1_database_name: '"moqesh-kurocyber-staging-events"',
+    protected_hostname: '"staging.example.com"',
+    admin_hostname: '"admin-staging.example.com"',
+    worker_name: '"moqesh-example-staging"',
+    d1_database_name: '"moqesh-example-staging-events"',
     create_staging_origin: "true",
     origin_service_name: '""',
     enable_public_route: "false",
@@ -299,7 +299,7 @@ nodeTest("examples keep production defaults safe and isolate the approved Kurocy
   }
 });
 
-nodeTest("webhook alerts default enabled and are disabled only for Kurocyber staging", async () => {
+nodeTest("webhook alerts default enabled and the staging example disables delivery", async () => {
   const variables = await terraformFile("variables.tf");
   assert.match(variableBody(variables, "alert_webhook_enabled"), /type\s*=\s*bool\s*default\s*=\s*true/);
 
@@ -310,7 +310,7 @@ nodeTest("webhook alerts default enabled and are disabled only for Kurocyber sta
   assert.match(secretProvisioner, /MOQESH_ALERT_WEBHOOK_ENABLED\s*=\s*tostring\(var\.alert_webhook_enabled\)/);
   assert.match(secretProvisioner, /var\.alert_webhook_enabled/);
 
-  const staging = await terraformFile("examples/kurocyber-staging.tfvars.example");
+  const staging = await terraformFile("examples/staging.tfvars.example");
   const basic = await terraformFile("examples/basic.tfvars.example");
   assert.match(staging, /^alert_webhook_enabled\s*=\s*false$/m);
   assert.doesNotMatch(basic, /^alert_webhook_enabled\s*=\s*false$/m);
@@ -324,7 +324,7 @@ nodeTest("Terraform lure path lists match the Worker's disclosure lures", async 
     readFile(new URL("../../src/lures.ts", import.meta.url), "utf8"),
     readFile(new URL("../variables.tf", import.meta.url), "utf8"),
     readFile(new URL("../examples/basic.tfvars.example", import.meta.url), "utf8"),
-    readFile(new URL("../examples/kurocyber-staging.tfvars.example", import.meta.url), "utf8"),
+    readFile(new URL("../examples/staging.tfvars.example", import.meta.url), "utf8"),
   ]);
   const workerPaths = [...lureSource.matchAll(/^  "(\/[^"]+)": \{$/gm)].map((match) => match[1]);
   const localBlock = variablesText.match(/disclosure_lure_paths = \[([\s\S]*?)\]/)?.[1] ?? "";

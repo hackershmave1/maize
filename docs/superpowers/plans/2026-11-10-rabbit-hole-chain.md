@@ -10,7 +10,7 @@
 
 Spec: `docs/superpowers/specs/2026-11-10-rabbit-hole-chain-design.md`.
 
-Run commands from `cloudflare/` in `/home/shay/Projects/moqesh/.worktrees/cloudflare-merge`, except Python commands, which run from the repository root.
+Run commands from `cloudflare/` in your feature worktree, except Python commands, which run from the repository root.
 
 ---
 
@@ -28,7 +28,7 @@ Run commands from `cloudflare/` in `/home/shay/Projects/moqesh/.worktrees/cloudf
 - Modify `cloudflare/src/index.ts`: maze-mode chain handling.
 - Modify `cloudflare/test/worker.test.ts`, `cloudflare/test/lures.test.ts`.
 - Modify `cloudflare/scripts/demo_attack.py`, `cloudflare/test/demo_attack_test.py`.
-- Modify `cloudflare/README.md`, `.github/prompts/animalpot-cloudflare-deploy.prompt.md`, `cloudflare/test/staging-acceptance.md`.
+- Modify `cloudflare/README.md`, `.github/prompts/maize-cloudflare-deploy.prompt.md`, `cloudflare/test/staging-acceptance.md`.
 
 ---
 
@@ -1058,11 +1058,11 @@ git commit -m "feat: walk the ten-hop rabbit hole in the guided demo"
 
 **Files:**
 - Modify: `cloudflare/README.md`
-- Modify: `.github/prompts/animalpot-cloudflare-deploy.prompt.md`
+- Modify: `.github/prompts/maize-cloudflare-deploy.prompt.md`
 
 - [ ] **Step 1: Update the docs**
 
-Find the spots with `grep -n "0004\|synthetic-account\|STAGE\|Stage 5" cloudflare/README.md .github/prompts/animalpot-cloudflare-deploy.prompt.md`. Then:
+Find the spots with `grep -n "0004\|synthetic-account\|STAGE\|Stage 5" cloudflare/README.md .github/prompts/maize-cloudflare-deploy.prompt.md`. Then:
 - **README traffic model:** after key reuse, describe the 10-hop chain (list the hop paths) and that the source is blocked immediately after hop 10. Within the maze, the real site still returns 404.
 - **README migrations:** list 0005 (rabbit-hole hop events) after 0004.
 - **README demo section:** 8 stages; stage 6 walks 9 hops, each needing `NEXT`; stage 7 expects 403.
@@ -1085,7 +1085,7 @@ Expected: all pass.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add cloudflare/README.md .github/prompts/animalpot-cloudflare-deploy.prompt.md
+git add cloudflare/README.md .github/prompts/maize-cloudflare-deploy.prompt.md
 git commit -m "docs: describe the rabbit-hole chain and migration 0005"
 ```
 
@@ -1095,10 +1095,10 @@ git commit -m "docs: describe the rabbit-hole chain and migration 0005"
 
 - [ ] **Step 1: Plan**
 
-From `cloudflare/terraform`, export the environment from the protected files in `/home/shay/.config/moqesh-deploy/`, as in the README's local-execution section. Then:
+From `cloudflare/terraform`, load your protected deployment environment, as in the README's local-execution section. Then:
 
 ```bash
-terraform plan -var-file=kurocyber-staging.tfvars -out=rabbit.tfplan
+terraform plan -var-file=staging.tfvars -out=rabbit.tfplan
 sha256sum rabbit.tfplan
 ```
 

@@ -1,7 +1,12 @@
-# Contributing to Moqesh AI
+# Contributing to MAIZE
 
 Thanks for your interest. This guide covers the development environment, testing and
 the project's conventions.
+
+MAIZE's current application is the Cloudflare Worker. Use
+[`cloudflare/README.md`](cloudflare/README.md) for its development checks and
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for deployment. The self-hosted
+instructions below concern retained legacy Moqesh code, not the Worker.
 
 ## Requirements
 

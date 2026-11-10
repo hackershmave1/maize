@@ -255,7 +255,12 @@ class DemoTests(unittest.TestCase):
             patch.object(demo, "run_demo") as run,
             patch.object(demo.sys, "stderr", new_callable=io.StringIO) as stderr,
         ):
-            self.assertEqual(demo.main([]), 2)
+            self.assertEqual(
+                demo.main(
+                    ["--base-url", "https://staging.example.com", "--admin-url", "https://admin-staging.example.com"]
+                ),
+                2,
+            )
         run.assert_not_called()
         self.assertIn("interactive terminal", stderr.getvalue())
 
@@ -284,17 +289,64 @@ class DemoTests(unittest.TestCase):
             "https://app.example.com:8443",
             "app.example.com",
         ]
-        for url in bad_urls:
+        for option in ["--base-url", "--admin-url"]:
+            for url in bad_urls:
+                args = ["--base-url", "https://app.example.com", "--admin-url", "https://admin.example.com"]
+                args[args.index(option) + 1] = url
+                with (
+                    self.subTest(option=option, url=url),
+                    patch.object(demo.sys.stdin, "isatty", return_value=True),
+                    patch.object(demo, "run_demo") as run,
+                    patch.object(demo, "build_opener") as opener,
+                    patch.object(demo.sys, "stderr", new_callable=io.StringIO),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    demo.main(args)
+                self.assertEqual(raised.exception.code, 2)
+                run.assert_not_called()
+                opener.assert_not_called()
+
+    def test_command_line_requires_both_explicit_origins_without_requests(self):
+        for args in [[], ["--base-url", "https://app.example.com"], ["--admin-url", "https://admin.example.com"]]:
             with (
-                self.subTest(url=url),
+                self.subTest(args=args),
                 patch.object(demo.sys.stdin, "isatty", return_value=True),
                 patch.object(demo, "run_demo") as run,
+                patch.object(demo, "build_opener") as opener,
                 patch.object(demo.sys, "stderr", new_callable=io.StringIO),
                 self.assertRaises(SystemExit) as raised,
             ):
-                demo.main(["--base-url", url])
+                demo.main(args)
             self.assertEqual(raised.exception.code, 2)
             run.assert_not_called()
+            opener.assert_not_called()
+
+    def test_command_line_rejects_equal_public_and_admin_origins(self):
+        with (
+            patch.object(demo.sys.stdin, "isatty", return_value=True),
+            patch.object(demo, "run_demo") as run,
+            patch.object(demo, "build_opener") as opener,
+            patch.object(demo.sys, "stderr", new_callable=io.StringIO),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            demo.main(["--base-url", "https://app.example.com", "--admin-url", "https://APP.example.com/"])
+        self.assertEqual(raised.exception.code, 2)
+        run.assert_not_called()
+        opener.assert_not_called()
+
+    def test_command_line_help_is_offline(self):
+        with (
+            patch.object(demo, "run_demo") as run,
+            patch.object(demo, "build_opener") as opener,
+            patch.object(demo.sys, "stdout", new_callable=io.StringIO) as stdout,
+            self.assertRaises(SystemExit) as raised,
+        ):
+            demo.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("--base-url", stdout.getvalue())
+        self.assertIn("--admin-url", stdout.getvalue())
+        run.assert_not_called()
+        opener.assert_not_called()
 
     def test_request_preview_host_matches_the_target(self):
         with (
@@ -306,7 +358,7 @@ class DemoTests(unittest.TestCase):
             demo.run_demo(input_fn=lambda _: "NEXT", output=lines.append, request_fn=request)
         text = "\n".join(lines)
         self.assertIn("Host: app.example.com", text)
-        self.assertNotIn("kurocyber", text)
+        self.assertNotIn("staging.example.com", text)
 
     def test_chain_refuses_leads_outside_the_fixed_staging_chain(self):
         bad_leads = [

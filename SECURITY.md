@@ -1,6 +1,6 @@
 # Security policy
 
-Moqesh AI is a **defensive** tool (honeypot/deception). We appreciate responsible
+MAIZE is a **defensive** tool (honeypot/deception). We appreciate responsible
 disclosure of vulnerabilities.
 
 ## Reporting a vulnerability
@@ -12,6 +12,11 @@ disclosure of vulnerabilities.
   and coordinate disclosure after a fix.
 
 ## Threat model and design decisions
+
+The assumptions below describe inherited Moqesh components. MAIZE's current
+Cloudflare deployment does not run remote sensors or the Python server; see
+[`cloudflare/README.md`](cloudflare/README.md) for Worker containment,
+Access protection, secret handling, and retention.
 
 By definition, Moqesh is deployed in hostile environments. Key assumptions:
 
