@@ -13,6 +13,7 @@ export interface PersistedSessionState {
   blockUntil: number | null;
   mazeRequests: number;
   throttledRequests: number;
+  chainDepth: number;
 }
 
 export interface AgentSessionSnapshot extends PersistedSessionState {
@@ -24,6 +25,11 @@ export interface MazeRequestResult {
   throttled: boolean;
 }
 
+export interface ChainAdvanceResult {
+  accepted: boolean;
+  state: AgentSessionSnapshot;
+}
+
 export function emptySessionState(): PersistedSessionState {
   return {
     confirmedAt: null,
@@ -31,6 +37,7 @@ export function emptySessionState(): PersistedSessionState {
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   };
 }
 

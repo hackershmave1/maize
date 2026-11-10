@@ -222,6 +222,7 @@ it("lists active maze and block states with their expiry", async () => {
     blockUntil: 3_000,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   }));
   const namespace = {
     idFromName: vi.fn((name: string) => name),
@@ -281,6 +282,7 @@ it("keeps an active block discoverable after its event expires", async () => {
       blockUntil: confirmed ? blockUntil : null,
       mazeRequests: 0,
       throttledRequests: 0,
+      chainDepth: 1,
     })),
     confirmKeyReuse: vi.fn(async () => {
       confirmed = true;
@@ -291,6 +293,7 @@ it("keeps an active block discoverable after its event expires", async () => {
         blockUntil,
         mazeRequests: 0,
         throttledRequests: 0,
+        chainDepth: 1,
       };
     }),
     recordMazeRequest: vi.fn(),
@@ -387,6 +390,7 @@ it("reconciles an active block after its initial containment index write fails",
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   };
   const session = {
     getMode: vi.fn(async () => state),
@@ -398,6 +402,7 @@ it("reconciles an active block after its initial containment index write fails",
         blockUntil,
         mazeRequests: 0,
         throttledRequests: 0,
+        chainDepth: 1,
       };
       return state;
     }),
@@ -468,6 +473,7 @@ it("reconciles an active block after its initial containment index write fails",
       blockUntil,
       mazeRequests: 0,
       throttledRequests: 0,
+      chainDepth: 1,
     };
     const blocked = await worker.fetch(
       new Request("https://site.example.test/private/data", {
@@ -537,6 +543,7 @@ it("paginates all active sources when there are more than one thousand candidate
         blockUntil: now + 60_000,
         mazeRequests: 0,
         throttledRequests: 0,
+        chainDepth: 1,
       })),
       unblock: vi.fn(),
     })),
@@ -754,6 +761,7 @@ it("uses the stored response budget for active maze traffic", async () => {
       blockUntil: 3_000,
       mazeRequests: 0,
       throttledRequests: 0,
+      chainDepth: 1,
     })),
     confirmKeyReuse: vi.fn(),
     recordMazeRequest: vi.fn(async () => ({
@@ -811,6 +819,7 @@ it("applies configured maze and block durations on confirmed key reuse", async (
       blockUntil: null,
       mazeRequests: 0,
       throttledRequests: 0,
+      chainDepth: 1,
     })),
     confirmKeyReuse: vi.fn(),
     recordMazeRequest: vi.fn(),
@@ -856,6 +865,7 @@ it("unblocks through the source Durable Object and audits the actor and time", a
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   }));
   const namespace = {
     idFromName: vi.fn((name: string) => name),

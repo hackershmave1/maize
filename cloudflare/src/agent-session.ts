@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { CHAIN_LENGTH } from "./rabbit-hole";
 import {
   BLOCK_DURATION_MS,
   MAZE_DURATION_MS,
@@ -6,6 +7,7 @@ import {
   expireSessionState,
   snapshotSessionState,
   type AgentSessionSnapshot,
+  type ChainAdvanceResult,
   type MazeRequestResult,
   type PersistedSessionState,
 } from "./session-state";
@@ -59,6 +61,7 @@ export class AgentSessionState {
           blockUntil: currentTime + mazeDurationMs + blockDurationMs,
           mazeRequests: 0,
           throttledRequests: 0,
+          chainDepth: 1,
         }
         : current;
       await storage.put(SESSION_KEY, state);
@@ -94,6 +97,35 @@ export class AgentSessionState {
     });
   }
 
+  async advanceChain(
+    hop: number,
+    blockDurationMs = BLOCK_DURATION_MS,
+  ): Promise<ChainAdvanceResult> {
+    return this.storage.transaction(async (storage) => {
+      const currentTime = this.now();
+      const current = await this.read(storage, currentTime);
+      const snapshot = snapshotSessionState(current, currentTime);
+      if (
+        snapshot.mode !== "maze"
+        || !Number.isInteger(hop)
+        || hop < 2
+        || hop > CHAIN_LENGTH
+        || hop > current.chainDepth + 1
+      ) {
+        return { accepted: false, state: snapshot };
+      }
+      const state: PersistedSessionState = {
+        ...current,
+        chainDepth: Math.max(current.chainDepth, hop),
+        ...(hop === CHAIN_LENGTH
+          ? { mazeUntil: currentTime, blockUntil: currentTime + blockDurationMs }
+          : {}),
+      };
+      await storage.put(SESSION_KEY, state);
+      return { accepted: true, state: snapshotSessionState(state, currentTime) };
+    });
+  }
+
   async unblock(): Promise<AgentSessionSnapshot> {
     return this.storage.transaction(async (storage) => {
       await storage.delete(SESSION_KEY);
@@ -105,8 +137,11 @@ export class AgentSessionState {
     storage: SessionStorage,
     currentTime: number,
   ): Promise<PersistedSessionState> {
-    const stored = await storage.get<PersistedSessionState>(SESSION_KEY);
-    const state = expireSessionState(stored ?? emptySessionState(), currentTime);
+    const stored = await storage.get<Partial<PersistedSessionState>>(SESSION_KEY);
+    const state = expireSessionState(
+      { ...emptySessionState(), ...(stored ?? {}) },
+      currentTime,
+    );
     if (stored && state.confirmedAt === null) {
       await storage.put(SESSION_KEY, state);
     }
@@ -138,6 +173,10 @@ export class AgentSession extends DurableObject<AgentSessionEnvironment> {
 
   recordMazeRequest(responseBudget: number): Promise<MazeRequestResult> {
     return this.session.recordMazeRequest(responseBudget);
+  }
+
+  advanceChain(hop: number, blockDurationMs?: number): Promise<ChainAdvanceResult> {
+    return this.session.advanceChain(hop, blockDurationMs);
   }
 
   unblock(): Promise<AgentSessionSnapshot> {

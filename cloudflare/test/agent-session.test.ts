@@ -71,6 +71,7 @@ it("starts with ordinary mode and empty counters", async () => {
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   });
   expect(storage.writes).toBe(0);
 });
@@ -125,6 +126,7 @@ it("clears expired quarantine state after the 24-hour block", async () => {
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   });
 });
 
@@ -203,6 +205,7 @@ it("unblocks a source and clears the persisted counters", async () => {
     blockUntil: null,
     mazeRequests: 0,
     throttledRequests: 0,
+    chainDepth: 0,
   });
 });
 
@@ -240,4 +243,48 @@ it("derives stable, installation-scoped, non-reversible state identifiers", asyn
   expect(first).not.toContain("2001");
   expect(otherSource).not.toBe(first);
   expect(otherInstallation).not.toBe(first);
+});
+it("records chain depth 1 on confirmation and advances hop by hop", async () => {
+  const session = createSession(() => 0);
+  await expect(session.confirmKeyReuse()).resolves.toMatchObject({ chainDepth: 1 });
+
+  await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({
+    accepted: true,
+    state: { mode: "maze", chainDepth: 2 },
+  });
+  await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({ accepted: true });
+  await expect(session.advanceChain(4, blockDuration)).resolves.toMatchObject({
+    accepted: false,
+    state: { chainDepth: 2 },
+  });
+});
+
+it("blocks immediately after the final hop", async () => {
+  const session = createSession(() => 5_000);
+  await session.confirmKeyReuse();
+  for (let hop = 2; hop < 10; hop += 1) await session.advanceChain(hop, blockDuration);
+
+  await expect(session.advanceChain(10, blockDuration)).resolves.toMatchObject({
+    accepted: true,
+    state: { mode: "blocked", chainDepth: 10, mazeUntil: 5_000, blockUntil: 5_000 + blockDuration },
+  });
+});
+
+it("rejects chain hops outside maze mode", async () => {
+  const session = createSession(() => 0);
+  await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({ accepted: false });
+});
+
+it("reads stored state from before chain depth existed as depth 0", async () => {
+  const storage = new MemoryStorage();
+  await storage.put("session", {
+    confirmedAt: 0,
+    mazeUntil: mazeDuration,
+    blockUntil: mazeDuration + blockDuration,
+    mazeRequests: 0,
+    throttledRequests: 0,
+  });
+  const session = new AgentSessionState(storage, () => 1);
+  await expect(session.getMode()).resolves.toMatchObject({ mode: "maze", chainDepth: 0 });
+  await expect(session.advanceChain(2, blockDuration)).resolves.toMatchObject({ accepted: false });
 });
